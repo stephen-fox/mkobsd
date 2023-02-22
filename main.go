@@ -31,6 +31,7 @@ const (
 	releaseArg     = "r"
 	cpuArchArg     = "a"
 	isoMirrorArg   = "m"
+	debugArg       = "d"
 )
 
 func main() {
@@ -70,6 +71,10 @@ func mainWithError(osArgs []string) error {
 		isoMirrorArg,
 		"https://cdn.openbsd.org/pub/OpenBSD",
 		"OpenBSD mirror URL")
+	debug := flagSet.Bool(
+		debugArg,
+		false,
+		"Enable debug mode")
 
 	flagSet.Parse(osArgs[1:])
 
@@ -121,6 +126,7 @@ func mainWithError(osArgs []string) error {
 	cache := &buildCache{
 		BasePath:   *baseDirPath,
 		HTTPClient: http.DefaultClient,
+		Debug:      *debug,
 	}
 
 	err = cache.setup()
@@ -199,7 +205,9 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 	if err != nil {
 		return "", fmt.Errorf("failed to extract openbsd iso - %w", err)
 	}
-	defer os.RemoveAll(newISODirPath)
+	if !o.Debug {
+		defer os.RemoveAll(newISODirPath)
+	}
 
 	rdFilePath := filepath.Join(newISODirPath, "bsd.rd")
 
