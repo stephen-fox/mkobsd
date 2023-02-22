@@ -371,7 +371,7 @@ func (o *buildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 
 func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
 	dirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
-	isoPath := filepath.Join(o.dlcDirPath, config.isoName())
+	isoPath := filepath.Join(dirPath, config.isoName())
 	sha256SigPath := filepath.Join(dirPath, config.sha256SigName())
 
 	verifyConfig := signifyVerifyConfig{
