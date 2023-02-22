@@ -101,6 +101,9 @@ func mainWithError(osArgs []string) error {
 				f.Name, f.Usage)
 		}
 	})
+	if err != nil {
+		return err
+	}
 
 	if os.Geteuid() != 0 {
 		return errors.New("must be root execute this program")
