@@ -155,15 +155,31 @@ func mainWithError(osArgs []string) error {
 type buildCache struct {
 	BasePath      string
 	HTTPClient    *http.Client
+	Debug         bool
 	dlcDirPath    string
 	buiildDirPath string
 }
 
 func (o *buildCache) setup() error {
+	if !filepath.IsAbs(o.BasePath) {
+		return fmt.Errorf("base path is not absolute ('%s')", o.BasePath)
+	}
+
+	info, err := os.Stat(o.BasePath)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+
+	if !info.IsDir() {
+		return errors.New("base path is a file (it should be a directory")
+	}
+
 	o.dlcDirPath = filepath.Join(o.BasePath, "/downloads")
 	o.buiildDirPath = filepath.Join(o.BasePath, "/build")
 
-	err := os.MkdirAll(o.dlcDirPath, 0700)
+	err = os.MkdirAll(o.dlcDirPath, 0700)
 	if err != nil {
 		return err
 	}
