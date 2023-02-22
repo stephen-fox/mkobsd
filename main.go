@@ -251,7 +251,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		"-A", volumeID,
 		"-P", "Copyright (c) Theo de Raadt <deraadt@openbsd.org>",
 		"-V", volumeID,
-		"-b", relArch+"/cbr",
+		"-b", relArch+"/cdbr",
 		"-c", relArch+"/boot.catalog",
 		newISODirPath)
 
