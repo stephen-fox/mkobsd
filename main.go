@@ -406,7 +406,10 @@ func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 
 	err = signifyVerify(ctx, verifyConfig)
 	if err != nil {
-		_ = os.Remove(isoPath)
+		if !o.Debug {
+			_ = os.Remove(isoPath)
+		}
+
 		return "", err
 	}
 
