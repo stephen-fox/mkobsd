@@ -201,16 +201,16 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 
 	buildDirPath := filepath.Join(o.buiildDirPath, buildConfigHash)
 
-	isoPath := filepath.Join(buildDirPath, fmt.Sprintf("openbsd-%s-%s.iso",
+	isoFilePath := filepath.Join(buildDirPath, fmt.Sprintf("openbsd-%s-%s.iso",
 		config.Release, config.Arch))
 
-	info, err := os.Stat(isoPath)
+	info, err := os.Stat(isoFilePath)
 	if err == nil {
 		if info.IsDir() {
-			return "", fmt.Errorf("iso path is a directory: '%s'", isoPath)
+			return "", fmt.Errorf("iso path is a directory: '%s'", isoFilePath)
 		}
 
-		return isoPath, nil
+		return isoFilePath, nil
 	}
 
 	newISODirPath, err := o.extractOpenbsdISO(ctx, buildDirPath, openbsdSrcFilesConfig{
@@ -246,7 +246,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		ctx,
 		mkhybridPath,
 		"-a", "-R", "-T", "-L", "-l", "-d", "-D", "-N",
-		"-o", isoPath,
+		"-o", isoFilePath,
 		"-v", "-v",
 		"-A", volumeID,
 		"-P", "Copyright (c) Theo de Raadt <deraadt@openbsd.org>",
@@ -257,11 +257,12 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 
 	out, err := mkhybrid.CombinedOutput()
 	if err != nil {
+		_ = os.Remove(isoFilePath)
 		return "", fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
 			mkhybrid.String(), err, out)
 	}
 
-	return isoPath, nil
+	return isoFilePath, nil
 }
 
 type isoConfig struct {
