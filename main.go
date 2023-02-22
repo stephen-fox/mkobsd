@@ -312,7 +312,7 @@ func (o *isoConfig) buildConfigHash() (string, error) {
 }
 
 func (o *buildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
-	baseISOMountPath := filepath.Join(buildDirPath, "base-iso")
+	baseISOMountPath := filepath.Join(buildDirPath, "base-iso-mnt")
 
 	err := os.MkdirAll(baseISOMountPath, 0700)
 	if err != nil {
