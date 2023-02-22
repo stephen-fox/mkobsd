@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha512"
+	"crypto/sha1"
 	"errors"
 	"flag"
 	"fmt"
@@ -276,39 +276,39 @@ type isoConfig struct {
 }
 
 func (o *isoConfig) buildConfigHash() (string, error) {
-	sha512Hash := sha512.New()
+	hashAlgo := sha1.New()
 
-	_, err := sha512Hash.Write([]byte(o.Release))
+	_, err := hashAlgo.Write([]byte(o.Release))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = sha512Hash.Write([]byte(o.Arch))
+	_, err = hashAlgo.Write([]byte(o.Arch))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = sha512Hash.Write([]byte(o.Hostname))
+	_, err = hashAlgo.Write([]byte(o.Hostname))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = sha512Hash.Write([]byte(o.DNSDomainName))
+	_, err = hashAlgo.Write([]byte(o.DNSDomainName))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = sha512Hash.Write([]byte(o.RootUserSSHPubKey))
+	_, err = hashAlgo.Write([]byte(o.RootUserSSHPubKey))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = sha512Hash.Write([]byte(o.SetNames))
+	_, err = hashAlgo.Write([]byte(o.SetNames))
 	if err != nil {
 		return "", err
 	}
 
-	return string(sha512Hash.Sum(nil)), nil
+	return fmt.Sprintf("%x", hashAlgo.Sum(nil)), nil
 }
 
 func (o *buildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
