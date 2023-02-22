@@ -225,7 +225,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		defer os.RemoveAll(newISODirPath)
 	}
 
-	rdFilePath := filepath.Join(newISODirPath, "bsd.rd")
+	rdFilePath := filepath.Join(newISODirPath, config.Release, config.Arch, "bsd.rd")
 
 	unmapRDFn, err := mapRAMDisk(ctx, rdFilePath, buildDirPath)
 	if err != nil {
