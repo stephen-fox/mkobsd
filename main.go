@@ -366,17 +366,15 @@ func (o *isoConfig) validate() error {
 		return errors.New("cpu architecture is empty")
 	}
 
-	if o.AutoinstallFilePath == "" {
-		return errors.New("auto_install file path is empty")
-	}
+	if o.AutoinstallFilePath != "" {
+		if !filepath.IsAbs(o.AutoinstallFilePath) {
+			return errors.New("auto_install config file path must be absolute")
+		}
 
-	if !filepath.IsAbs(o.AutoinstallFilePath) {
-		return errors.New("auto_install file path must be absolute")
-	}
-
-	_, err := os.Stat(o.AutoinstallFilePath)
-	if err != nil {
-		return err
+		_, err := os.Stat(o.AutoinstallFilePath)
+		if err != nil {
+			return err
+		}
 	}
 
 	if o.InstallsiteDirPath != "" {
