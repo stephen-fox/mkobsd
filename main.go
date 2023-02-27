@@ -84,14 +84,16 @@ func mainWithError(osArgs []string) error {
 	autoinstallFilePath := flagSet.String(
 		autoinstallArg,
 		"",
-		"The path to the autoinstall configuration file (refer to\n"+
-			"'man autoinstall' for more information)")
+		"The path to the autoinstall configuration file (see also:\n"+
+			"'man autoinstall')")
 	installsiteDirPath := flagSet.String(
 		installsiteDirArg,
 		"",
-		"Optionally specify an install.site directory to be included\n"+
-			"in the resulting ISO file (refer to 'man install.site'\n"+
-			"for more information)")
+		"Optionally specify an install.site directory to be included in the\n"+
+			"resulting ISO file. The directory's contents will be placed in a tar\n"+
+			"archive and extracted to '/' at install time. If an executable file\n"+
+			"named 'install.site' exists at the root of the directory, it will be\n"+
+			"executed by the installer (see also: 'man install.site')")
 	debug := flagSet.Bool(
 		debugArg,
 		false,
