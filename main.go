@@ -10,12 +10,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -25,13 +27,16 @@ import (
 const (
 	appName = "mkobsd"
 
-	helpArg        = "h"
-	commandModeArg = "c"
-	baseDirPathArg = "b"
-	releaseArg     = "r"
-	cpuArchArg     = "a"
-	isoMirrorArg   = "m"
-	debugArg       = "d"
+	helpArg           = "h"
+	commandModeArg    = "c"
+	baseDirPathArg    = "b"
+	dirPermArg        = "p"
+	releaseArg        = "r"
+	cpuArchArg        = "a"
+	isoMirrorArg      = "m"
+	autoinstallArg    = "i"
+	installsiteDirArg = "d"
+	debugArg          = "D"
 )
 
 func main() {
@@ -59,10 +64,15 @@ func mainWithError(osArgs []string) error {
 		"",
 		"Optionally specify the base directory for builds\n"+
 			"(defaults to '~/mkobsd' is not specified)")
+	baseDirsPerm := filePermFlag{perm: 0755}
+	flagSet.Var(
+		&baseDirsPerm,
+		dirPermArg,
+		"The default file mode permission bits for directories\n")
 	release := flagSet.String(
 		releaseArg,
 		"",
-		"OpenBSD release number (e.g., '7.2')")
+		"OpenBSD release version (e.g., '7.2')")
 	cpuArch := flagSet.String(
 		cpuArchArg,
 		"",
@@ -71,6 +81,17 @@ func mainWithError(osArgs []string) error {
 		isoMirrorArg,
 		"https://cdn.openbsd.org/pub/OpenBSD",
 		"OpenBSD mirror URL")
+	autoinstallFilePath := flagSet.String(
+		autoinstallArg,
+		"",
+		"The path to the autoinstall configuration file (refer to\n"+
+			"'man autoinstall' for more information)")
+	installsiteDirPath := flagSet.String(
+		installsiteDirArg,
+		"",
+		"Optionally specify an install.site directory to be included\n"+
+			"in the resulting ISO file (refer to 'man install.site'\n"+
+			"for more information)")
 	debug := flagSet.Bool(
 		debugArg,
 		false,
@@ -103,7 +124,7 @@ func mainWithError(osArgs []string) error {
 
 		if f.Value.String() == "" && !strings.HasPrefix(f.Usage, "Optional") {
 			err = fmt.Errorf("please specify '-%s' - %s",
-				f.Name, f.Usage)
+				f.Name, strings.ReplaceAll(f.Usage, "\n", " "))
 		}
 	})
 	if err != nil {
@@ -111,7 +132,7 @@ func mainWithError(osArgs []string) error {
 	}
 
 	if os.Geteuid() != 0 {
-		return errors.New("must be root execute this program")
+		return errors.New("must be root to execute this program")
 	}
 
 	if *baseDirPath == "" {
@@ -124,9 +145,10 @@ func mainWithError(osArgs []string) error {
 	}
 
 	cache := &buildCache{
-		BasePath:   *baseDirPath,
-		HTTPClient: http.DefaultClient,
-		Debug:      *debug,
+		BasePath:     *baseDirPath,
+		BaseDirsPerm: baseDirsPerm.perm,
+		HTTPClient:   http.DefaultClient,
+		Debug:        *debug,
 	}
 
 	err = cache.setup()
@@ -139,9 +161,11 @@ func mainWithError(osArgs []string) error {
 	defer cancelFn()
 
 	isoPath, err := cache.buildISO(ctx, &isoConfig{
-		Mirror:  *isoMirror,
-		Release: *release,
-		Arch:    *cpuArch,
+		Mirror:              *isoMirror,
+		Release:             *release,
+		Arch:                *cpuArch,
+		AutoinstallFilePath: *autoinstallFilePath,
+		InstallsiteDirPath:  *installsiteDirPath,
 	})
 	if err != nil {
 		return err
@@ -152,8 +176,28 @@ func mainWithError(osArgs []string) error {
 	return nil
 }
 
+type filePermFlag struct {
+	perm fs.FileMode
+}
+
+func (o *filePermFlag) Set(v string) error {
+	i, err := strconv.ParseUint(v, 8, 32)
+	if err != nil {
+		return err
+	}
+
+	o.perm = fs.FileMode(uint32(i))
+
+	return nil
+}
+
+func (o *filePermFlag) String() string {
+	return fmt.Sprintf("%o | %s", o.perm, o.perm.String())
+}
+
 type buildCache struct {
 	BasePath      string
+	BaseDirsPerm  fs.FileMode
 	HTTPClient    *http.Client
 	Debug         bool
 	dlcDirPath    string
@@ -165,26 +209,28 @@ func (o *buildCache) setup() error {
 		return fmt.Errorf("base path is not absolute ('%s')", o.BasePath)
 	}
 
-	info, err := os.Stat(o.BasePath)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
+	if o.BaseDirsPerm == 0 {
+		return errors.New("base directory permissions not set")
 	}
 
-	if !info.IsDir() {
+	_, baseInfo, err := pathExists(o.BasePath)
+	if err != nil {
+		return err
+	}
+
+	if baseInfo != nil && !baseInfo.IsDir() {
 		return errors.New("base path is a file (it should be a directory")
 	}
 
 	o.dlcDirPath = filepath.Join(o.BasePath, "/downloads")
 	o.buiildDirPath = filepath.Join(o.BasePath, "/build")
 
-	err = os.MkdirAll(o.dlcDirPath, 0700)
+	err = os.MkdirAll(o.dlcDirPath, o.BaseDirsPerm)
 	if err != nil {
 		return err
 	}
 
-	err = os.MkdirAll(o.buiildDirPath, 0700)
+	err = os.MkdirAll(o.buiildDirPath, o.BaseDirsPerm)
 	if err != nil {
 		return err
 	}
@@ -193,6 +239,11 @@ func (o *buildCache) setup() error {
 }
 
 func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, error) {
+	err := config.validate()
+	if err != nil {
+		return "", fmt.Errorf("failed to validate iso config - %w", err)
+	}
+
 	// Check if we already have the built iso.
 	buildConfigHash, err := config.buildConfigHash()
 	if err != nil {
@@ -204,13 +255,18 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 	isoFilePath := filepath.Join(buildDirPath, fmt.Sprintf("openbsd-%s-%s.iso",
 		config.Release, config.Arch))
 
-	info, err := os.Stat(isoFilePath)
-	if err == nil {
-		if info.IsDir() {
+	isoExists, isoInfo, _ := pathExists(isoFilePath)
+	if isoExists {
+		if isoInfo.IsDir() {
 			return "", fmt.Errorf("iso path is a directory: '%s'", isoFilePath)
 		}
 
 		return isoFilePath, nil
+	}
+
+	err = os.MkdirAll(buildDirPath, o.BaseDirsPerm)
+	if err != nil {
+		return "", err
 	}
 
 	newISODirPath, err := o.extractOpenbsdISO(ctx, buildDirPath, openbsdSrcFilesConfig{
@@ -227,11 +283,20 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 
 	rdFilePath := filepath.Join(newISODirPath, config.Release, config.Arch, "bsd.rd")
 
-	unmapRDFn, err := mapRAMDisk(ctx, rdFilePath, buildDirPath)
+	rdMountDirPath, unmapRDFn, err := mapRAMDisk(ctx, rdFilePath, buildDirPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to map ram disk - %w", err)
 	}
 	defer unmapRDFn(context.Background())
+
+	err = o.copyInstallAutomation(ctx, copyInstallAutomationConfig{
+		ISOConfig:  config,
+		ISODirPath: newISODirPath,
+		RDDirPath:  rdMountDirPath,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to copy installer automation - %w", err)
+	}
 
 	err = unmapRDFn(ctx)
 	if err != nil {
@@ -265,14 +330,70 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 	return isoFilePath, nil
 }
 
+func pathExists(filePath string) (bool, os.FileInfo, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil, nil
+		}
+
+		return false, nil, err
+	}
+
+	return true, info, nil
+}
+
 type isoConfig struct {
-	Mirror            string
-	Release           string
-	Arch              string
-	Hostname          string
-	DNSDomainName     string
-	RootUserSSHPubKey string
-	SetNames          string
+	Mirror              string
+	Release             string
+	Arch                string
+	AutoinstallFilePath string
+	InstallsiteDirPath  string
+}
+
+func (o *isoConfig) validate() error {
+	if o.Mirror == "" {
+		return errors.New("mirror url is empty")
+	}
+
+	if o.Release == "" {
+		return errors.New("release version is empty")
+	}
+
+	if o.Arch == "" {
+		return errors.New("cpu architecture is empty")
+	}
+
+	if o.AutoinstallFilePath == "" {
+		return errors.New("auto_install file path is empty")
+	}
+
+	if !filepath.IsAbs(o.AutoinstallFilePath) {
+		return errors.New("auto_install file path must be absolute")
+	}
+
+	_, err := os.Stat(o.AutoinstallFilePath)
+	if err != nil {
+		return err
+	}
+
+	if o.InstallsiteDirPath != "" {
+		if !filepath.IsAbs(o.InstallsiteDirPath) {
+			return errors.New("install.site directory path must be absolute")
+		}
+
+		info, err := os.Stat(o.InstallsiteDirPath)
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			return fmt.Errorf("install.site dir path is not a directory ('%s')",
+				o.InstallsiteDirPath)
+		}
+	}
+
+	return nil
 }
 
 func (o *isoConfig) buildConfigHash() (string, error) {
@@ -288,22 +409,12 @@ func (o *isoConfig) buildConfigHash() (string, error) {
 		return "", err
 	}
 
-	_, err = hashAlgo.Write([]byte(o.Hostname))
+	_, err = hashAlgo.Write([]byte(o.AutoinstallFilePath))
 	if err != nil {
 		return "", err
 	}
 
-	_, err = hashAlgo.Write([]byte(o.DNSDomainName))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = hashAlgo.Write([]byte(o.RootUserSSHPubKey))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = hashAlgo.Write([]byte(o.SetNames))
+	_, err = hashAlgo.Write([]byte(o.InstallsiteDirPath))
 	if err != nil {
 		return "", err
 	}
@@ -416,6 +527,42 @@ func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 	return isoPath, nil
 }
 
+type copyInstallAutomationConfig struct {
+	ISOConfig  *isoConfig
+	ISODirPath string
+	RDDirPath  string
+}
+
+func (o *buildCache) copyInstallAutomation(ctx context.Context, config copyInstallAutomationConfig) error {
+	if config.ISOConfig.AutoinstallFilePath != "" {
+		err := copyFilePathToWithMode(
+			config.ISOConfig.AutoinstallFilePath,
+			filepath.Join(config.RDDirPath, "auto_install.conf"),
+			0644)
+		if err != nil {
+			return fmt.Errorf("failed to copy auto_install config - %w", err)
+		}
+	}
+
+	if config.ISOConfig.InstallsiteDirPath != "" {
+		siteParentDirPath := filepath.Join(
+			config.ISODirPath,
+			config.ISOConfig.Release,
+			config.ISOConfig.Arch)
+
+		err := createInstallsiteTar(ctx, createInstallsiteTarConfig{
+			SiteDirPath: config.ISOConfig.InstallsiteDirPath,
+			OutDirPath:  siteParentDirPath,
+			Release:     config.ISOConfig.Release,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create install.site tar - %w", err)
+		}
+	}
+
+	return nil
+}
+
 type openbsdSrcFilesConfig struct {
 	Mirror  string
 	Release string
@@ -501,10 +648,99 @@ func httpGetToFilePath(ctx context.Context, client *http.Client, urlStr string, 
 	return nil
 }
 
-func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (func(context.Context) error, error) {
+func copyDirectoryTo(srcDirPath string, dstDirPath string) error {
+	dstExists, _, _ := pathExists(dstDirPath)
+	if dstExists {
+		return errors.New("destination directory already exists")
+	}
+
+	err := filepath.WalkDir(srcDirPath, func(filePath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		dstPath := filepath.Join(
+			dstDirPath,
+			strings.TrimPrefix(filePath, srcDirPath))
+
+		if d.IsDir() {
+			dirInfo, err := os.Stat(filePath)
+			if err != nil {
+				return err
+			}
+
+			err = os.MkdirAll(dstPath, dirInfo.Mode().Perm())
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}
+
+		err = copyFilePathTo(filePath, dstPath)
+		if err != nil {
+			return fmt.Errorf("failed to copy '%s' to '%s' - %w",
+				filePath, dstPath, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func copyFilePathToWithMode(srcPath string, dstPath string, mode fs.FileMode) error {
+	err := copyFilePathTo(srcPath, dstPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chmod(dstPath, mode)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func copyFilePathTo(srcPath string, dstPath string) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	srcInfo, err := src.Stat()
+	if err != nil {
+		return err
+	}
+
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	err = dst.Chmod(srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (string, func(context.Context) error, error) {
 	isCompressed, err := gzipDecompressIfNeeded(ctx, rdFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check / decompress ramdisk - %w", err)
+		return "", nil, fmt.Errorf("failed to check / decompress ramdisk - %w", err)
 	}
 
 	diskFSPath := filepath.Join(buildDirPath, "rd-disk-fs")
@@ -512,14 +748,14 @@ func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (fu
 	// Create an empty file for rdsetroot.
 	err = os.WriteFile(diskFSPath, nil, 0600)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	rdMountDirPath := filepath.Join(buildDirPath, "rd-mnt")
 
 	err = os.MkdirAll(rdMountDirPath, 0700)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	const rdsetrootPath = "/usr/sbin/rdsetroot"
@@ -530,13 +766,13 @@ func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (fu
 
 	out, err := rdsetrootExtract.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
+		return "", nil, fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
 			rdsetrootExtract.String(), err, out)
 	}
 
 	vndID, unconfigureFn, err := allocateVNDForFile(ctx, diskFSPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to allocate vnd for ram disk - %w", err)
+		return "", nil, fmt.Errorf("failed to allocate vnd for ram disk - %w", err)
 	}
 
 	vndPath := "/dev/" + vndID + "a"
@@ -544,12 +780,12 @@ func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (fu
 	umountFn, err := mount(ctx, nil, vndPath, rdMountDirPath)
 	if err != nil {
 		_ = unconfigureFn(context.Background())
-		return nil, fmt.Errorf("failed to mount ram disk - %w", err)
+		return "", nil, fmt.Errorf("failed to mount ram disk - %w", err)
 	}
 
 	once := &sync.Once{}
 
-	return func(ctx context.Context) error {
+	return rdMountDirPath, func(ctx context.Context) error {
 		var needsDone bool
 
 		once.Do(func() {
@@ -645,33 +881,65 @@ func gzipDecompressIfNeeded(ctx context.Context, targetPath string) (bool, error
 	return true, nil
 }
 
+type createInstallsiteTarConfig struct {
+	SiteDirPath string
+	OutDirPath  string
+	Release     string
+}
+
+func createInstallsiteTar(ctx context.Context, config createInstallsiteTarConfig) error {
+	// Example: "/path/to/iso-dir/site72.tgz"
+	targzFilePath := filepath.Join(
+		config.OutDirPath,
+		"site"+strings.ReplaceAll(config.Release, ".", "")+".tgz")
+
+	const tarExePath = "/bin/tar"
+
+	// TODO: Use Go's 'tar' and 'gzip' libraries.
+	// Already exec'ing a bunch of garbage, plus
+	// it would have been a pain to figure out
+	// some of the edge cases (symlinks).
+	t := exec.CommandContext(ctx, tarExePath,
+		"-C", config.SiteDirPath,
+		"-czf", targzFilePath,
+		".")
+
+	out, err := t.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
+			t.String(), err, out)
+	}
+
+	return nil
+}
+
 func gzipCompress(filePath string) error {
-	rd, err := os.OpenFile(filePath, os.O_RDWR, 0600)
+	f, err := os.OpenFile(filePath, os.O_RDWR, 0600)
 	if err != nil {
 		return err
 	}
-	defer rd.Close()
+	defer f.Close()
 
-	rdUncompressed, err := io.ReadAll(rd)
-	if err != nil {
-		return err
-	}
-
-	_, err = rd.Seek(0, io.SeekStart)
+	uncompressed, err := io.ReadAll(f)
 	if err != nil {
 		return err
 	}
 
-	err = rd.Truncate(0)
+	_, err = f.Seek(0, io.SeekStart)
 	if err != nil {
 		return err
 	}
 
-	gzipWriter := gzip.NewWriter(rd)
-
-	_, err = io.Copy(gzipWriter, bytes.NewReader(rdUncompressed))
+	err = f.Truncate(0)
 	if err != nil {
-		return fmt.Errorf("failed to compress ramdisk - %w", err)
+		return err
+	}
+
+	gzipWriter := gzip.NewWriter(f)
+
+	_, err = io.Copy(gzipWriter, bytes.NewReader(uncompressed))
+	if err != nil {
+		return fmt.Errorf("failed to compress file - %w", err)
 	}
 	defer gzipWriter.Close()
 
