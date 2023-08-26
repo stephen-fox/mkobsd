@@ -18,12 +18,12 @@ import (
 )
 
 type BuildCache struct {
-	BasePath     string
-	BaseDirsPerm fs.FileMode
-	HTTPClient   *http.Client
-	Debug        bool
-	dlcDirPath   string
-	setupOnce    sync.Once
+	BasePath       string
+	BaseDirsPerm   fs.FileMode
+	HTTPClient     *http.Client
+	DebugISOVerify bool
+	dlcDirPath     string
+	setupOnce      sync.Once
 }
 
 func (o *BuildCache) setup() error {
@@ -55,7 +55,23 @@ func (o *BuildCache) setup() error {
 	return nil
 }
 
+const (
+	setupAction                 = "setup"
+	extractOpenBSDIsoAction     = "extract-obsd-iso"
+	mapKernelRAMDiskAction      = "map-kernel-ram-disk"
+	copyInstallAutomationAction = "copy-install-automation"
+	unmapKernelRAMDiskAction    = "unmap-kernel-ram-disk"
+	makeNewISOAction            = "make-new-iso"
+)
+
 func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error {
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(setupAction, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	var err error
 	o.setupOnce.Do(func() {
 		err = o.setup()
@@ -73,6 +89,23 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	if err != nil {
 		return fmt.Errorf("failed to create temp build directory - %w", err)
 	}
+	defer os.RemoveAll(buildDirPath)
+
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(setupAction, map[string]string{
+			"build-dir-path": buildDirPath,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(extractOpenBSDIsoAction, nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	newISODirPath, err := o.extractOpenbsdISO(ctx, buildDirPath, openbsdSrcFilesConfig{
 		Mirror:  config.Mirror,
@@ -82,17 +115,49 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	if err != nil {
 		return fmt.Errorf("failed to extract openbsd iso - %w", err)
 	}
-	if !o.Debug {
-		defer os.RemoveAll(newISODirPath)
+	defer os.RemoveAll(newISODirPath)
+
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(extractOpenBSDIsoAction, map[string]string{
+			"extracted-iso-dir-path": newISODirPath,
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	rdFilePath := filepath.Join(newISODirPath, config.Release, config.Arch, "bsd.rd")
+
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(mapKernelRAMDiskAction, map[string]string{
+			"ram-risk-file-path": rdFilePath,
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	rdMountDirPath, unmapRDFn, err := mapRAMDisk(ctx, rdFilePath, buildDirPath)
 	if err != nil {
 		return fmt.Errorf("failed to map ram disk - %w", err)
 	}
 	defer unmapRDFn(context.Background())
+
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(mapKernelRAMDiskAction, map[string]string{
+			"ram-disk-mount-dir-path": rdMountDirPath,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(copyInstallAutomationAction, nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	err = o.copyInstallAutomation(ctx, copyInstallAutomationConfig{
 		ISOConfig:  config,
@@ -103,9 +168,37 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		return fmt.Errorf("failed to copy installer automation - %w", err)
 	}
 
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(copyInstallAutomationAction, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(unmapKernelRAMDiskAction, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = unmapRDFn(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to un-map rd - %w", err)
+	}
+
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(unmapKernelRAMDiskAction, nil)
+		if err != nil {
+			return err
+		}
+	}
+
+	if config.BeforeActionFn != nil {
+		err := config.BeforeActionFn(makeNewISOAction, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	const mkhybridPath = "/usr/sbin/mkhybrid"
@@ -132,6 +225,13 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 			mkhybrid.String(), err, out)
 	}
 
+	if config.AfterActionFn != nil {
+		err := config.AfterActionFn(makeNewISOAction, nil)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -155,6 +255,8 @@ type BuildISOConfig struct {
 	Arch                string
 	AutoinstallFilePath string
 	InstallsiteDirPath  string
+	BeforeActionFn      func(string, map[string]string) error
+	AfterActionFn       func(string, map[string]string) error
 }
 
 func (o *BuildISOConfig) validate() error {
@@ -320,17 +422,19 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 
 	err = httpGetToFilePath(ctx, o.HTTPClient, config.sha256SigUrl(), sha256SigPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to http get sha256 file '%s' - %w",
+			config.sha256SigUrl(), err)
 	}
 
 	err = httpGetToFilePath(ctx, o.HTTPClient, config.isoUrl(), isoPath)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to http get openbsd iso '%s' - %w",
+			config.isoUrl(), err)
 	}
 
 	err = signifyVerify(ctx, verifyConfig)
 	if err != nil {
-		if !o.Debug {
+		if !o.DebugISOVerify {
 			_ = os.Remove(isoPath)
 		}
 

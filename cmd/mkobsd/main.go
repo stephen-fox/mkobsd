@@ -34,6 +34,7 @@ const (
 	autoinstallArg    = "i"
 	installsiteDirArg = "d"
 	debugArg          = "D"
+	debugVerifyISOArg = "I"
 )
 
 func main() {
@@ -98,7 +99,11 @@ func mainWithError(osArgs []string) error {
 	debug := flagSet.Bool(
 		debugArg,
 		false,
-		"Enable debug mode")
+		"Enable debug mode and step through each stage of the build workflow")
+	debugVerifyISO := flagSet.Bool(
+		debugVerifyISOArg,
+		false,
+		"Do not delete OpenBSD .iso if verification fails")
 
 	flagSet.Parse(osArgs[1:])
 
@@ -154,15 +159,32 @@ func mainWithError(osArgs []string) error {
 	}
 
 	cache := &mkobsd.BuildCache{
-		BasePath:     *baseDirPath,
-		BaseDirsPerm: baseDirsPerm.perm,
-		HTTPClient:   http.DefaultClient,
-		Debug:        *debug,
+		BasePath:       *baseDirPath,
+		BaseDirsPerm:   baseDirsPerm.perm,
+		HTTPClient:     http.DefaultClient,
+		DebugISOVerify: *debugVerifyISO,
 	}
 
 	ctx, cancelFn := signal.NotifyContext(context.Background(),
 		syscall.SIGINT, syscall.SIGTERM)
 	defer cancelFn()
+
+	var beforeFn func(string, map[string]string) error
+	var afterFn func(string, map[string]string) error
+
+	if *debug {
+		beforeFn = func(s string, info map[string]string) error {
+			log.Printf("[%s] start - info: %+v - press enter to continue", s, info)
+			fmt.Scanln()
+			return nil
+		}
+
+		afterFn = func(s string, info map[string]string) error {
+			log.Printf("[%s] finished - info: %+v - press enter to continue", s, info)
+			fmt.Scanln()
+			return nil
+		}
+	}
 
 	err = cache.BuildISO(ctx, &mkobsd.BuildISOConfig{
 		ISOOutputPath:       *isoOutputPath,
@@ -171,6 +193,8 @@ func mainWithError(osArgs []string) error {
 		Arch:                *cpuArch,
 		AutoinstallFilePath: *autoinstallFilePath,
 		InstallsiteDirPath:  *installsiteDirPath,
+		BeforeActionFn:      beforeFn,
+		AfterActionFn:       afterFn,
 	})
 	if err != nil {
 		return err
