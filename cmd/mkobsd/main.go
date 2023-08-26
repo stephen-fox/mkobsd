@@ -184,13 +184,19 @@ func mainWithError(osArgs []string) error {
 	if *debug {
 		beforeFn = func(s string, info map[string]string) error {
 			log.Printf("[%s] start - info: %+v - press enter to continue", s, info)
-			fmt.Scanln()
+			err := readNewlineCtx(ctx)
+			if err != nil {
+				return err
+			}
 			return nil
 		}
 
 		afterFn = func(s string, info map[string]string) error {
 			log.Printf("[%s] finished - info: %+v - press enter to continue", s, info)
-			fmt.Scanln()
+			err := readNewlineCtx(ctx)
+			if err != nil {
+				return err
+			}
 			return nil
 		}
 	}
@@ -210,6 +216,28 @@ func mainWithError(osArgs []string) error {
 	}
 
 	return nil
+}
+
+func readNewlineCtx(ctx context.Context) error {
+	newline := make(chan error, 1)
+
+	go func() {
+		_, err := fmt.Scanln()
+		newline <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		os.Stdin.Close()
+
+		return ctx.Err()
+	case err := <-newline:
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
 }
 
 type filePermFlag struct {
