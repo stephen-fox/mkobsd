@@ -1,5 +1,4 @@
-// mkobsd creates custom OpenBSD ISO images for automated installations.
-package main
+package mkobsd
 
 import (
 	"bytes"
@@ -7,206 +6,27 @@ import (
 	"context"
 	"crypto/sha1"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
-	"syscall"
-	"unicode/utf8"
 )
 
-const (
-	appName = "mkobsd"
-
-	helpArg           = "h"
-	commandModeArg    = "c"
-	baseDirPathArg    = "b"
-	dirPermArg        = "p"
-	releaseArg        = "r"
-	cpuArchArg        = "a"
-	isoMirrorArg      = "m"
-	autoinstallArg    = "i"
-	installsiteDirArg = "d"
-	debugArg          = "D"
-)
-
-func main() {
-	log.SetFlags(0)
-
-	err := mainWithError(os.Args)
-	if err != nil {
-		log.Fatalln("error:", err)
-	}
+type BuildCache struct {
+	BasePath     string
+	BaseDirsPerm fs.FileMode
+	HTTPClient   *http.Client
+	Debug        bool
+	dlcDirPath   string
+	setupOnce    sync.Once
 }
 
-func mainWithError(osArgs []string) error {
-	flagSet := flag.NewFlagSet(osArgs[0], flag.ExitOnError)
-
-	help := flagSet.Bool(
-		helpArg,
-		false,
-		"Display this information")
-	commandMode := flagSet.String(
-		commandModeArg,
-		"",
-		"Optionally execute like a shell command similar to '/bin/sh -c ...'")
-	baseDirPath := flagSet.String(
-		baseDirPathArg,
-		"",
-		"Optionally specify the base directory for builds\n"+
-			"(defaults to '~/mkobsd' is not specified)")
-	baseDirsPerm := filePermFlag{perm: 0755}
-	flagSet.Var(
-		&baseDirsPerm,
-		dirPermArg,
-		"The default file mode permission bits for directories\n")
-	release := flagSet.String(
-		releaseArg,
-		"",
-		"OpenBSD release version (e.g., '7.2')")
-	cpuArch := flagSet.String(
-		cpuArchArg,
-		"",
-		"Target CPU architecture (e.g., 'amd64')")
-	isoMirror := flagSet.String(
-		isoMirrorArg,
-		"https://cdn.openbsd.org/pub/OpenBSD",
-		"OpenBSD mirror URL")
-	autoinstallFilePath := flagSet.String(
-		autoinstallArg,
-		"",
-		"The path to the autoinstall configuration file (see also:\n"+
-			"'man autoinstall')")
-	installsiteDirPath := flagSet.String(
-		installsiteDirArg,
-		"",
-		"Optionally specify an install.site directory to be included in the\n"+
-			"resulting ISO file. The directory's contents will be placed in a tar\n"+
-			"archive and extracted to '/' at install time. If an executable file\n"+
-			"named 'install.site' exists at the root of the directory, it will be\n"+
-			"executed by the installer (see also: 'man install.site')")
-	debug := flagSet.Bool(
-		debugArg,
-		false,
-		"Enable debug mode")
-
-	flagSet.Parse(osArgs[1:])
-
-	if *help {
-		flagSet.PrintDefaults()
-		os.Exit(1)
-	}
-
-	if *commandMode != "" {
-		args, err := split(*commandMode)
-		if err != nil {
-			return err
-		}
-
-		temp := []string{osArgs[0]}
-
-		return mainWithError(append(temp, args...))
-	}
-
-	var err error
-
-	flagSet.VisitAll(func(f *flag.Flag) {
-		if err != nil {
-			return
-		}
-
-		if f.Value.String() == "" && !strings.HasPrefix(f.Usage, "Optional") {
-			err = fmt.Errorf("please specify '-%s' - %s",
-				f.Name, strings.ReplaceAll(f.Usage, "\n", " "))
-		}
-	})
-	if err != nil {
-		return err
-	}
-
-	if os.Geteuid() != 0 {
-		return errors.New("must be root to execute this program")
-	}
-
-	if *baseDirPath == "" {
-		homeDirPath, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-
-		*baseDirPath = filepath.Join(homeDirPath, appName)
-	}
-
-	cache := &buildCache{
-		BasePath:     *baseDirPath,
-		BaseDirsPerm: baseDirsPerm.perm,
-		HTTPClient:   http.DefaultClient,
-		Debug:        *debug,
-	}
-
-	err = cache.setup()
-	if err != nil {
-		return fmt.Errorf("failed to setup cache - %w", err)
-	}
-
-	ctx, cancelFn := signal.NotifyContext(context.Background(),
-		syscall.SIGINT, syscall.SIGTERM)
-	defer cancelFn()
-
-	isoPath, err := cache.buildISO(ctx, &isoConfig{
-		Mirror:              *isoMirror,
-		Release:             *release,
-		Arch:                *cpuArch,
-		AutoinstallFilePath: *autoinstallFilePath,
-		InstallsiteDirPath:  *installsiteDirPath,
-	})
-	if err != nil {
-		return err
-	}
-
-	log.Println(isoPath)
-
-	return nil
-}
-
-type filePermFlag struct {
-	perm fs.FileMode
-}
-
-func (o *filePermFlag) Set(v string) error {
-	i, err := strconv.ParseUint(v, 8, 32)
-	if err != nil {
-		return err
-	}
-
-	o.perm = fs.FileMode(uint32(i))
-
-	return nil
-}
-
-func (o *filePermFlag) String() string {
-	return fmt.Sprintf("%o | %s", o.perm, o.perm.String())
-}
-
-type buildCache struct {
-	BasePath      string
-	BaseDirsPerm  fs.FileMode
-	HTTPClient    *http.Client
-	Debug         bool
-	dlcDirPath    string
-	buiildDirPath string
-}
-
-func (o *buildCache) setup() error {
+func (o *BuildCache) setup() error {
 	if !filepath.IsAbs(o.BasePath) {
 		return fmt.Errorf("base path is not absolute ('%s')", o.BasePath)
 	}
@@ -225,50 +45,33 @@ func (o *buildCache) setup() error {
 	}
 
 	o.dlcDirPath = filepath.Join(o.BasePath, "/downloads")
-	o.buiildDirPath = filepath.Join(o.BasePath, "/build")
 
 	err = os.MkdirAll(o.dlcDirPath, o.BaseDirsPerm)
 	if err != nil {
-		return err
-	}
-
-	err = os.MkdirAll(o.buiildDirPath, o.BaseDirsPerm)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to create dlc dir '%s' - %w",
+			o.dlcDirPath, err)
 	}
 
 	return nil
 }
 
-func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, error) {
-	err := config.validate()
+func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error {
+	var err error
+	o.setupOnce.Do(func() {
+		err = o.setup()
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to validate iso config - %w", err)
+		return err
 	}
 
-	// Check if we already have the built iso.
-	buildConfigHash, err := config.buildConfigHash()
+	err = config.validate()
 	if err != nil {
-		return "", err
+		return fmt.Errorf("failed to validate iso config - %w", err)
 	}
 
-	buildDirPath := filepath.Join(o.buiildDirPath, buildConfigHash)
-
-	isoFilePath := filepath.Join(buildDirPath, fmt.Sprintf("openbsd-%s-%s.iso",
-		config.Release, config.Arch))
-
-	isoExists, isoInfo, _ := pathExists(isoFilePath)
-	if isoExists {
-		if isoInfo.IsDir() {
-			return "", fmt.Errorf("iso path is a directory: '%s'", isoFilePath)
-		}
-
-		return isoFilePath, nil
-	}
-
-	err = os.MkdirAll(buildDirPath, o.BaseDirsPerm)
+	buildDirPath, err := os.MkdirTemp(o.BasePath, ".build-"+filepath.Base(config.ISOOutputPath)+"-")
 	if err != nil {
-		return "", err
+		return fmt.Errorf("failed to create temp build directory - %w", err)
 	}
 
 	newISODirPath, err := o.extractOpenbsdISO(ctx, buildDirPath, openbsdSrcFilesConfig{
@@ -277,7 +80,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		Arch:    config.Arch,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to extract openbsd iso - %w", err)
+		return fmt.Errorf("failed to extract openbsd iso - %w", err)
 	}
 	if !o.Debug {
 		defer os.RemoveAll(newISODirPath)
@@ -287,7 +90,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 
 	rdMountDirPath, unmapRDFn, err := mapRAMDisk(ctx, rdFilePath, buildDirPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to map ram disk - %w", err)
+		return fmt.Errorf("failed to map ram disk - %w", err)
 	}
 	defer unmapRDFn(context.Background())
 
@@ -297,12 +100,12 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		RDDirPath:  rdMountDirPath,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to copy installer automation - %w", err)
+		return fmt.Errorf("failed to copy installer automation - %w", err)
 	}
 
 	err = unmapRDFn(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to un-map rd - %w", err)
+		return fmt.Errorf("failed to un-map rd - %w", err)
 	}
 
 	const mkhybridPath = "/usr/sbin/mkhybrid"
@@ -313,7 +116,7 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 		ctx,
 		mkhybridPath,
 		"-a", "-R", "-T", "-L", "-l", "-d", "-D", "-N",
-		"-o", isoFilePath,
+		"-o", config.ISOOutputPath,
 		"-v", "-v",
 		"-A", volumeID,
 		"-P", "Copyright (c) Theo de Raadt <deraadt@openbsd.org>",
@@ -324,12 +127,12 @@ func (o *buildCache) buildISO(ctx context.Context, config *isoConfig) (string, e
 
 	out, err := mkhybrid.CombinedOutput()
 	if err != nil {
-		_ = os.Remove(isoFilePath)
-		return "", fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
+		_ = os.Remove(config.ISOOutputPath)
+		return fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
 			mkhybrid.String(), err, out)
 	}
 
-	return isoFilePath, nil
+	return nil
 }
 
 func pathExists(filePath string) (bool, os.FileInfo, error) {
@@ -345,7 +148,8 @@ func pathExists(filePath string) (bool, os.FileInfo, error) {
 	return true, info, nil
 }
 
-type isoConfig struct {
+type BuildISOConfig struct {
+	ISOOutputPath       string
 	Mirror              string
 	Release             string
 	Arch                string
@@ -353,7 +157,16 @@ type isoConfig struct {
 	InstallsiteDirPath  string
 }
 
-func (o *isoConfig) validate() error {
+func (o *BuildISOConfig) validate() error {
+	if o.ISOOutputPath == "" {
+		return errors.New("iso output path is empty")
+	}
+
+	isoAlreadyExists, _, _ := pathExists(o.ISOOutputPath)
+	if isoAlreadyExists {
+		return fmt.Errorf("a file or directory already exists at '%s'", o.ISOOutputPath)
+	}
+
 	if o.Mirror == "" {
 		return errors.New("mirror url is empty")
 	}
@@ -396,7 +209,7 @@ func (o *isoConfig) validate() error {
 	return nil
 }
 
-func (o *isoConfig) buildConfigHash() (string, error) {
+func (o *BuildISOConfig) buildConfigHash() (string, error) {
 	hashAlgo := sha1.New()
 
 	_, err := hashAlgo.Write([]byte(o.Release))
@@ -422,7 +235,7 @@ func (o *isoConfig) buildConfigHash() (string, error) {
 	return fmt.Sprintf("%x", hashAlgo.Sum(nil)), nil
 }
 
-func (o *buildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
+func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
 	baseISOMountPath := filepath.Join(buildDirPath, "base-iso-mnt")
 
 	err := os.MkdirAll(baseISOMountPath, 0700)
@@ -480,7 +293,7 @@ func (o *buildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 	return newISOContentsPath, nil
 }
 
-func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
+func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
 	dirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
 	isoPath := filepath.Join(dirPath, config.isoName())
 	sha256SigPath := filepath.Join(dirPath, config.sha256SigName())
@@ -502,7 +315,7 @@ func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 
 	err = os.MkdirAll(dirPath, 0700)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create dlc iso path '%s' - %w", dirPath, err)
 	}
 
 	err = httpGetToFilePath(ctx, o.HTTPClient, config.sha256SigUrl(), sha256SigPath)
@@ -528,12 +341,12 @@ func (o *buildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 }
 
 type copyInstallAutomationConfig struct {
-	ISOConfig  *isoConfig
+	ISOConfig  *BuildISOConfig
 	ISODirPath string
 	RDDirPath  string
 }
 
-func (o *buildCache) copyInstallAutomation(ctx context.Context, config copyInstallAutomationConfig) error {
+func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInstallAutomationConfig) error {
 	if config.ISOConfig.AutoinstallFilePath != "" {
 		err := copyFilePathToWithMode(
 			config.ISOConfig.AutoinstallFilePath,
@@ -666,12 +479,14 @@ func copyDirectoryTo(srcDirPath string, dstDirPath string) error {
 		if d.IsDir() {
 			dirInfo, err := os.Stat(filePath)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to stat directory '%s' - %w",
+					filePath, err)
 			}
 
 			err = os.MkdirAll(dstPath, dirInfo.Mode().Perm())
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to create directory '%s' - %w",
+					dstPath, err)
 			}
 
 			return nil
@@ -755,7 +570,8 @@ func mapRAMDisk(ctx context.Context, rdFilePath string, buildDirPath string) (st
 
 	err = os.MkdirAll(rdMountDirPath, 0700)
 	if err != nil {
-		return "", nil, err
+		return "", nil, fmt.Errorf("failed to create rd mount dir path '%s' - %w",
+			rdMountDirPath, err)
 	}
 
 	const rdsetrootPath = "/usr/sbin/rdsetroot"
@@ -1050,156 +866,4 @@ func doasOrNormalExecCmd(ctx context.Context, exe string, args ...string) *exec.
 	}
 
 	return app
-}
-
-// The following code is copied from Kevin Ballard.
-// https://github.com/kballard/go-shellquote.
-// See 'LICENSE-THIRD-PARTY.md' for details.
-const (
-	splitChars        = " \n\t"
-	singleChar        = '\''
-	doubleChar        = '"'
-	escapeChar        = '\\'
-	doubleEscapeChars = "$`\"\n\\"
-)
-
-// The following code is copied from Kevin Ballard.
-// https://github.com/kballard/go-shellquote.
-// See 'LICENSE-THIRD-PARTY.md' for details.
-//
-// Split splits a string according to /bin/sh's word-splitting rules. It
-// supports backslash-escapes, single-quotes, and double-quotes. Notably it does
-// not support the $” style of quoting. It also doesn't attempt to perform any
-// other sort of expansion, including brace expansion, shell expansion, or
-// pathname expansion.
-//
-// If the given input has an unterminated quoted string or ends in a
-// backslash-escape, one of UnterminatedSingleQuoteError,
-// UnterminatedDoubleQuoteError, or UnterminatedEscapeError is returned.
-func split(input string) (words []string, err error) {
-	var buf bytes.Buffer
-	words = make([]string, 0)
-
-	for len(input) > 0 {
-		// skip any splitChars at the start
-		c, l := utf8.DecodeRuneInString(input)
-		if strings.ContainsRune(splitChars, c) {
-			input = input[l:]
-			continue
-		} else if c == escapeChar {
-			// Look ahead for escaped newline so we can skip over it
-			next := input[l:]
-			if len(next) == 0 {
-				err = fmt.Errorf("unterminated backslash-escape")
-				return
-			}
-			c2, l2 := utf8.DecodeRuneInString(next)
-			if c2 == '\n' {
-				input = next[l2:]
-				continue
-			}
-		}
-
-		var word string
-		word, input, err = splitWord(input, &buf)
-		if err != nil {
-			return
-		}
-		words = append(words, word)
-	}
-	return
-}
-
-// The following code is copied from Kevin Ballard.
-// https://github.com/kballard/go-shellquote.
-// See 'LICENSE-THIRD-PARTY.md' for details.
-func splitWord(input string, buf *bytes.Buffer) (word string, remainder string, err error) {
-	buf.Reset()
-
-raw:
-	{
-		cur := input
-		for len(cur) > 0 {
-			c, l := utf8.DecodeRuneInString(cur)
-			cur = cur[l:]
-			if c == singleChar {
-				buf.WriteString(input[0 : len(input)-len(cur)-l])
-				input = cur
-				goto single
-			} else if c == doubleChar {
-				buf.WriteString(input[0 : len(input)-len(cur)-l])
-				input = cur
-				goto double
-			} else if c == escapeChar {
-				buf.WriteString(input[0 : len(input)-len(cur)-l])
-				input = cur
-				goto escape
-			} else if strings.ContainsRune(splitChars, c) {
-				buf.WriteString(input[0 : len(input)-len(cur)-l])
-				return buf.String(), cur, nil
-			}
-		}
-		if len(input) > 0 {
-			buf.WriteString(input)
-			input = ""
-		}
-		goto done
-	}
-
-escape:
-	{
-		if len(input) == 0 {
-			return "", "", fmt.Errorf("unterminated backslash-escape")
-		}
-		c, l := utf8.DecodeRuneInString(input)
-		if c == '\n' {
-			// a backslash-escaped newline is elided from the output entirely
-		} else {
-			buf.WriteString(input[:l])
-		}
-		input = input[l:]
-	}
-	goto raw
-
-single:
-	{
-		i := strings.IndexRune(input, singleChar)
-		if i == -1 {
-			return "", "", fmt.Errorf("unterminated single-quoted string")
-		}
-		buf.WriteString(input[0:i])
-		input = input[i+1:]
-		goto raw
-	}
-
-double:
-	{
-		cur := input
-		for len(cur) > 0 {
-			c, l := utf8.DecodeRuneInString(cur)
-			cur = cur[l:]
-			if c == doubleChar {
-				buf.WriteString(input[0 : len(input)-len(cur)-l])
-				input = cur
-				goto raw
-			} else if c == escapeChar {
-				// bash only supports certain escapes in double-quoted strings
-				c2, l2 := utf8.DecodeRuneInString(cur)
-				cur = cur[l2:]
-				if strings.ContainsRune(doubleEscapeChars, c2) {
-					buf.WriteString(input[0 : len(input)-len(cur)-l-l2])
-					if c2 == '\n' {
-						// newline is special, skip the backslash entirely
-					} else {
-						buf.WriteRune(c2)
-					}
-					input = cur
-				}
-			}
-		}
-		return "", "", fmt.Errorf("unterminated double-quoted string")
-	}
-
-done:
-	return buf.String(), input, nil
 }
