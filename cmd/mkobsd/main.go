@@ -33,6 +33,7 @@ const (
 	isoMirrorArg      = "m"
 	autoinstallArg    = "i"
 	installsiteDirArg = "d"
+	logTimestampsArg  = "t"
 	debugArg          = "D"
 	debugVerifyISOArg = "I"
 )
@@ -96,6 +97,10 @@ func mainWithError(osArgs []string) error {
 			"archive and extracted to '/' at install time. If an executable file\n"+
 			"named 'install.site' exists at the root of the directory, it will be\n"+
 			"executed by the installer (see also: 'man install.site')")
+	logTimestamps := flagSet.Bool(
+		logTimestampsArg,
+		false,
+		"Include timestamps in log messages")
 	debug := flagSet.Bool(
 		debugArg,
 		false,
@@ -137,6 +142,10 @@ func mainWithError(osArgs []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if *logTimestamps {
+		log.SetFlags(log.Flags() | log.Ldate | log.Ltime)
 	}
 
 	owner := os.Getuid()
