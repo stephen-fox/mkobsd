@@ -260,6 +260,7 @@ type BuildISOConfig struct {
 	Arch                string
 	AutoinstallFilePath string
 	InstallsiteDirPath  string
+	PreserveSiteTarIDs  bool
 	BeforeActionFn      func(string, map[string]string) error
 	AfterActionFn       func(string, map[string]string) error
 }
@@ -476,6 +477,7 @@ func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInsta
 			SiteDirPath: config.ISOConfig.InstallsiteDirPath,
 			OutDirPath:  siteParentDirPath,
 			Release:     config.ISOConfig.Release,
+			PreserveIDs: config.ISOConfig.PreserveSiteTarIDs,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create install.site tar - %w", err)

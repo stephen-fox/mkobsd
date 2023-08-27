@@ -22,19 +22,20 @@ import (
 const (
 	appName = "mkobsd"
 
-	helpArg           = "h"
-	commandModeArg    = "c"
-	isoOutputPathArg  = "o"
-	baseDirPathArg    = "b"
-	dirPermArg        = "p"
-	releaseArg        = "r"
-	cpuArchArg        = "a"
-	isoMirrorArg      = "m"
-	autoinstallArg    = "i"
-	installsiteDirArg = "d"
-	logTimestampsArg  = "t"
-	debugArg          = "D"
-	debugVerifyISOArg = "I"
+	helpArg               = "h"
+	commandModeArg        = "c"
+	isoOutputPathArg      = "o"
+	baseDirPathArg        = "b"
+	dirPermArg            = "p"
+	releaseArg            = "r"
+	cpuArchArg            = "a"
+	isoMirrorArg          = "m"
+	autoinstallArg        = "i"
+	installsiteDirArg     = "d"
+	preserveSiteTarIDsArg = "P"
+	logTimestampsArg      = "t"
+	debugArg              = "D"
+	debugVerifyISOArg     = "K"
 
 	debugEnvName = "MKOBSD_DEBUG"
 
@@ -99,6 +100,11 @@ func mainWithError(osArgs []string) error {
 			"archive and extracted to '/' at install time. If an executable file\n"+
 			"named 'install.site' exists at the root of the directory, it will be\n"+
 			"executed by the installer (see also: 'man install.site')")
+	preserveSiteTarIDs := flagSet.Bool(
+		preserveSiteTarIDsArg,
+		false,
+		"Preserve UID and GIDs of the install.site directory when creating a tar.\n"+
+			"Defaults to not preserving UIDs and GIDs (root:wheel is used)")
 	logTimestamps := flagSet.Bool(
 		logTimestampsArg,
 		false,
@@ -217,6 +223,7 @@ func mainWithError(osArgs []string) error {
 		Arch:                *cpuArch,
 		AutoinstallFilePath: *autoinstallFilePath,
 		InstallsiteDirPath:  *installsiteDirPath,
+		PreserveSiteTarIDs:  *preserveSiteTarIDs,
 		BeforeActionFn:      beforeFn,
 		AfterActionFn:       afterFn,
 	})
