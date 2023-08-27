@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"unicode/utf8"
 
-	"gitlab.com/stephen-fox/mkobsd"
+	"gitlab.com/stephen-fox/mkobsd/internal/mkobsd"
 )
 
 const (
