@@ -896,7 +896,6 @@ func addFileToTar(tw *tar.Writer, filePath string, tarHeaderName string, preserv
 	// not be preserved:
 	// https://golang.org/src/archive/tar/common.go?#L626
 	//
-	// TODO: This part does not work - we still get a warning from tar.
 	// Also remove any leading slash to avoid warnings from the
 	// tar program like this:
 	//  tar: Removing leading / from absolute path names in the archive
