@@ -1,6 +1,7 @@
 package mkobsd
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -805,6 +806,7 @@ type createInstallsiteTarConfig struct {
 	SiteDirPath string
 	OutDirPath  string
 	Release     string
+	PreserveIDs bool
 }
 
 func createInstallsiteTar(ctx context.Context, config createInstallsiteTarConfig) error {
@@ -813,21 +815,108 @@ func createInstallsiteTar(ctx context.Context, config createInstallsiteTarConfig
 		config.OutDirPath,
 		"site"+strings.ReplaceAll(config.Release, ".", "")+".tgz")
 
-	const tarExePath = "/bin/tar"
-
-	// TODO: Use Go's 'tar' and 'gzip' libraries.
-	// Already exec'ing a bunch of garbage, plus
-	// it would have been a pain to figure out
-	// some of the edge cases (symlinks).
-	t := exec.CommandContext(ctx, tarExePath,
-		"-C", config.SiteDirPath,
-		"-czf", targzFilePath,
-		".")
-
-	out, err := t.CombinedOutput()
+	f, err := os.OpenFile(targzFilePath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
-			t.String(), err, out)
+		return fmt.Errorf("failed to create tar file - %w", err)
+	}
+	defer f.Close()
+
+	err = tarGzDir(ctx, config.SiteDirPath, f, config.PreserveIDs)
+	if err != nil {
+		return fmt.Errorf("failed to tar directory - %w", err)
+	}
+
+	return nil
+}
+
+func tarGzDir(ctx context.Context, dirPath string, w io.Writer, preserveIDs bool) error {
+	absDirPath, err := filepath.Abs(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for directory '%s' - %w",
+			dirPath, err)
+	}
+
+	gzipWriter := gzip.NewWriter(w)
+	defer gzipWriter.Close()
+
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer tarWriter.Close()
+
+	err = filepath.WalkDir(absDirPath, func(srcPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		tarPath := strings.TrimPrefix(srcPath, absDirPath)
+
+		err = addFileToTar(tarWriter, srcPath, tarPath, preserveIDs)
+		if err != nil {
+			return fmt.Errorf("failed to add file '%s' to tar - %w",
+				srcPath, err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func addFileToTar(tw *tar.Writer, filePath string, tarHeaderName string, preserveIDs bool) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+
+	header, err := tar.FileInfoHeader(info, filePath)
+	if err != nil {
+		return err
+	}
+
+	// Use full path as name (FileInfoHeader only takes the basename)
+	// If we don't do this the directory strucuture would
+	// not be preserved:
+	// https://golang.org/src/archive/tar/common.go?#L626
+	//
+	// TODO: This part does not work - we still get a warning from tar.
+	// Also remove any leading slash to avoid warnings from the
+	// tar program like this:
+	//  tar: Removing leading / from absolute path names in the archive
+	header.Name = strings.TrimPrefix(tarHeaderName, "/")
+
+	if !preserveIDs {
+		header.Uid = 0
+		header.Gid = 0
+		header.Uname = "root"
+		header.Gname = "wheel"
+	}
+
+	err = tw.WriteHeader(header)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(tw, file)
+	if err != nil {
+		return err
 	}
 
 	return nil
