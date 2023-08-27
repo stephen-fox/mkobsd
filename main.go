@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -38,6 +37,8 @@ const (
 	debugVerifyISOArg = "I"
 
 	debugEnvName = "MKOBSD_DEBUG"
+
+	defaultBaseDirPath = "/home/_" + appName
 )
 
 func main() {
@@ -66,9 +67,8 @@ func mainWithError(osArgs []string) error {
 		"The file path to save the resulting .iso file to")
 	baseDirPath := flagSet.String(
 		baseDirPathArg,
-		"",
-		"Optionally specify the base directory for builds\n"+
-			"(defaults to '~/mkobsd' if not specified)")
+		defaultBaseDirPath,
+		"The base directory for builds")
 	baseDirsPerm := filePermFlag{perm: 0755}
 	flagSet.Var(
 		&baseDirsPerm,
@@ -164,15 +164,6 @@ func mainWithError(osArgs []string) error {
 	group := os.Getgid()
 	if group != 0 {
 		return fmt.Errorf("must be root to exexcute this program (proc gid is: %d)", group)
-	}
-
-	if *baseDirPath == "" {
-		homeDirPath, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-
-		*baseDirPath = filepath.Join(homeDirPath, appName)
 	}
 
 	cache := &mkobsd.BuildCache{
