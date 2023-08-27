@@ -46,7 +46,7 @@ func (o *BuildCache) setup() error {
 	}
 
 	if baseInfo != nil && !baseInfo.IsDir() {
-		return errors.New("base path is a file (it should be a directory")
+		return errors.New("base path is a file (it should be a directory)")
 	}
 
 	o.dlcDirPath = filepath.Join(o.BasePath, "/downloads")
