@@ -28,6 +28,10 @@ type BuildCache struct {
 }
 
 func (o *BuildCache) setup() error {
+	if o.HTTPClient == nil {
+		o.HTTPClient = http.DefaultClient
+	}
+
 	if !filepath.IsAbs(o.BasePath) {
 		return fmt.Errorf("base path is not absolute ('%s')", o.BasePath)
 	}
