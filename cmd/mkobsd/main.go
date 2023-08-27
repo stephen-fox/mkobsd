@@ -36,6 +36,8 @@ const (
 	logTimestampsArg  = "t"
 	debugArg          = "D"
 	debugVerifyISOArg = "I"
+
+	debugEnvName = "MKOBSD_DEBUG"
 )
 
 func main() {
@@ -104,11 +106,13 @@ func mainWithError(osArgs []string) error {
 	debug := flagSet.Bool(
 		debugArg,
 		false,
-		"Enable debug mode and step through each stage of the build workflow")
+		"Enable debug mode and step through each stage of the build workflow.\n"+
+			"May also be enabled by setting the '"+debugEnvName+"' environment variable\n"+
+			"to 'true'")
 	debugVerifyISO := flagSet.Bool(
 		debugVerifyISOArg,
 		false,
-		"Do not delete OpenBSD .iso if verification fails")
+		"Do not delete original OpenBSD .iso if verification fails")
 
 	flagSet.Parse(osArgs[1:])
 
@@ -142,6 +146,10 @@ func mainWithError(osArgs []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if os.Getenv(debugEnvName) == "true" {
+		*debug = true
 	}
 
 	if *logTimestamps {
