@@ -49,7 +49,7 @@ func (o *BuildCache) setup() error {
 		return errors.New("base path is a file (it should be a directory)")
 	}
 
-	o.dlcDirPath = filepath.Join(o.BasePath, "/downloads")
+	o.dlcDirPath = filepath.Join(o.BasePath, "downloads")
 
 	err = os.MkdirAll(o.dlcDirPath, o.BaseDirsPerm)
 	if err != nil {
