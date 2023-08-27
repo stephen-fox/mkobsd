@@ -199,6 +199,16 @@ func mainWithError(osArgs []string) error {
 			}
 			return nil
 		}
+	} else {
+		beforeFn = func(s string, _ map[string]string) error {
+			log.Printf("[%s] start", s)
+			return nil
+		}
+
+		afterFn = func(s string, info map[string]string) error {
+			log.Printf("[%s] finished", s)
+			return nil
+		}
 	}
 
 	err = cache.BuildISO(ctx, &mkobsd.BuildISOConfig{
