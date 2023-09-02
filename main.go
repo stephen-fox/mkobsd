@@ -26,13 +26,14 @@ SYNOPSIS
 
 DESCRIPTION
   ` + appName + ` automates the creation of OpenBSD installer ISO images.
-  It was designed to create unattended installer images by including an
-  auto_install.conf file and/or an install.site script and tar set in the
-  ISO file itself. For more information regarding OpenBSD installer
-  automation, please refer to the manual pages mentioned in the
-  SEE ALSO section for more information
 
-  For examples, please execute ` + appName + ` with the -` + advHelpArg + ` argument.
+  It was designed to create unattended installer images by including
+  an auto_install.conf file and/or an install.site script and tar set
+  in the ISO file itself. For more information regarding OpenBSD
+  installer automation, please refer to the manual pages mentioned
+  in the SEE ALSO section.
+
+  For examples, please execute: ` + appName + ` -` + advHelpArg + `
 
 SEE ALSO
   autoinstall(8), install.site(5)
