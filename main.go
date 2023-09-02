@@ -97,11 +97,11 @@ func mainWithError(osArgs []string) error {
 	flagSet.Var(
 		&baseDirsPerm,
 		dirPermArg,
-		"The default file mode permission bits for directories\n")
+		"The default file mode permission bits for build directories\n")
 	release := flagSet.String(
 		releaseArg,
 		"",
-		"OpenBSD release version (e.g., '7.2')")
+		"OpenBSD release version (e.g., '7.3')")
 	cpuArch := flagSet.String(
 		cpuArchArg,
 		"",
@@ -135,9 +135,8 @@ func mainWithError(osArgs []string) error {
 	debug := flagSet.Bool(
 		debugArg,
 		false,
-		"Enable debug mode and step through each stage of the build workflow.\n"+
-			"May also be enabled by setting the '"+debugEnvName+"' environment variable\n"+
-			"to 'true'")
+		"Enable debug mode. This allows the user to step through each\nstage of the build workflow. May also be enabled by setting\n"+
+			"the '"+debugEnvName+"' environment variable to 'true'")
 	debugVerifyISO := flagSet.Bool(
 		debugVerifyISOArg,
 		false,
