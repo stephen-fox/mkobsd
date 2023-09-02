@@ -1,0 +1,27 @@
+#!/bin/sh
+
+set -ex
+
+add_admin() {
+  local username="${1}"
+  shift
+  local home="/home/${username}"
+
+  echo "permit nopass ${username} as root" >> /etc/doas.conf
+
+  /usr/sbin/adduser -batch "${username}" wheel
+
+  for ssh_public_key in "${@}"; do
+    echo "${ssh_public_key}" >> "${home}/.ssh/authorized_keys"
+  done
+}
+
+/usr/sbin/pkg_add -a vim--no_x11 go git
+
+echo "@reboot /bin/sh -c '(echo -----BEGIN SSHD PUBLIC KEYS-----; /bin/cat /etc/ssh/*.pub; echo -----END SSHD PUBLIC KEYS-----) > /dev/tty00'" >> /var/cron/tabs/root
+
+add_admin me 'ecdsa-sha2-nistp256 AAAAAAA buh'
+
+/usr/bin/doas -C /etc/doas.conf
+
+/bin/chmod 0600 /etc/doas.conf
