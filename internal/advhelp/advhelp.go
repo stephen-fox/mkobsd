@@ -36,7 +36,9 @@ const Usage = `EXAMPLES
       -d "${dir_path}/generic"
 
     $ cat auto_install.conf
+    # Note: This file is documented in "man 8 autoinstall"
     System hostname = example
+    # Note: 13 "*" is a magic string that disables password login for root.
     Password for root = *************
     Set name(s) = +site* -game*
     Continue without verification = yes
