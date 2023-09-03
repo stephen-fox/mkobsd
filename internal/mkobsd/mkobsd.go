@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
@@ -315,32 +314,6 @@ func (o *BuildISOConfig) validate() error {
 	}
 
 	return nil
-}
-
-func (o *BuildISOConfig) buildConfigHash() (string, error) {
-	hashAlgo := sha1.New()
-
-	_, err := hashAlgo.Write([]byte(o.Release))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = hashAlgo.Write([]byte(o.Arch))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = hashAlgo.Write([]byte(o.AutoinstallFilePath))
-	if err != nil {
-		return "", err
-	}
-
-	_, err = hashAlgo.Write([]byte(o.InstallsiteDirPath))
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf("%x", hashAlgo.Sum(nil)), nil
 }
 
 func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
