@@ -56,3 +56,9 @@ doas cp ~/go/bin/mkobsd /usr/local/bin/
 ## Examples
 
 Please refer to the [examples](examples) directory.
+
+## Special thanks
+
+This project was heavily inspired by Tim Baumgard's
+[openbsd-custom-image](https://github.com/tbaumgard/openbsd-custom-image)
+project. Thank you, Tim.
