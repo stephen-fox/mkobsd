@@ -22,6 +22,12 @@ the ISO file itself.
 [autoinstall]: https://man.openbsd.org/autoinstall.8
 [install.site]: https://man.openbsd.org/install.site.5
 
+## Requirements
+
+- An OpenBSD system (the application can be compiled on any OS, but it
+  relies on tools included with OpenBSD)
+- Go (Golang)
+
 ## Installation
 
 The preferred method of installation is using `go install` (as this is
