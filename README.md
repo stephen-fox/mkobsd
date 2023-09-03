@@ -35,8 +35,14 @@ a Golang application). This automates downloading and building Go
 applications from source in a secure manner. By default, applications
 are copied into `~/go/bin/`.
 
-You must first [install Go](https://golang.org/doc/install). After installing
-Go, run the following commands to install the applications:
+You must first [install Go](https://golang.org/doc/install). If you are
+compiling the application on OpenBSD, you can install Go by executing:
+
+```sh
+doas pkg_add go
+```
+
+After installing Go, run the following commands to install the application:
 
 ```sh
 go install gitlab.com/stephen-fox/mkobsd@latest
