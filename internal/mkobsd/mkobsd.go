@@ -438,7 +438,7 @@ func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInsta
 			filepath.Join(config.RDDirPath, "auto_install.conf"),
 			0644)
 		if err != nil {
-			return fmt.Errorf("failed to copy auto_install config - %w", err)
+			return fmt.Errorf("failed to copy autoinstall config file - %w", err)
 		}
 	}
 
