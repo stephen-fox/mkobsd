@@ -643,37 +643,6 @@ func signifyVerifyAs(ctx context.Context, u *userInfo, config signifyVerifyConfi
 	return nil
 }
 
-func httpGetToFilePath(ctx context.Context, client *http.Client, urlStr string, toPath string) error {
-	f, err := os.OpenFile(toPath, os.O_CREATE|os.O_WRONLY, 0600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
-	if err != nil {
-		return err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode > 300 {
-		return fmt.Errorf("http response is not 200 - got %d",
-			resp.StatusCode)
-	}
-
-	_, err = io.Copy(f, resp.Body)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func copyDirectoryTo(srcDirPath string, dstDirPath string) error {
 	dstExists, _, _ := pathExists(dstDirPath)
 	if dstExists {
