@@ -12,6 +12,10 @@ the ISO file itself.
   (note: interactive installations are also supported)
 - Automatic downloading and verification of original OpenBSD ISO images.
   Original ISOs are stored in a configurable directory
+- Downloading and verification of the original OpenBSD ISO are carried
+  out by `ftp(1)` and `signify(1)` as a non-root user. Both applications
+  implement `pledge(2)`, adding a meaningful security barrier between
+  mkobsd and unverified data
 - Optionally specify an [autoinstall(8)][autoinstall] configuration file
   to be included in the new ISO
 - Optionally specify an [install.site(5)][install.site] script and
