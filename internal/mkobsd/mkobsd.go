@@ -69,8 +69,8 @@ const (
 )
 
 func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error {
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(setupAction, nil)
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(setupAction, nil)
 		if err != nil {
 			return err
 		}
@@ -95,8 +95,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	}
 	defer os.RemoveAll(buildDirPath)
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(setupAction, map[string]string{
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(setupAction, map[string]string{
 			"build-dir-path": buildDirPath,
 		})
 		if err != nil {
@@ -104,8 +104,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		}
 	}
 
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(extractOpenBSDIsoAction, nil)
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(extractOpenBSDIsoAction, nil)
 		if err != nil {
 			return err
 		}
@@ -121,8 +121,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	}
 	defer os.RemoveAll(newISODirPath)
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(extractOpenBSDIsoAction, map[string]string{
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(extractOpenBSDIsoAction, map[string]string{
 			"extracted-iso-dir-path": newISODirPath,
 		})
 		if err != nil {
@@ -132,8 +132,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 
 	rdFilePath := filepath.Join(newISODirPath, config.Release, config.Arch, "bsd.rd")
 
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(mapKernelRAMDiskAction, map[string]string{
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(mapKernelRAMDiskAction, map[string]string{
 			"ram-risk-file-path": rdFilePath,
 		})
 		if err != nil {
@@ -147,8 +147,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	}
 	defer unmapRDFn(context.Background())
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(mapKernelRAMDiskAction, map[string]string{
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(mapKernelRAMDiskAction, map[string]string{
 			"ram-disk-mount-dir-path": rdMountDirPath,
 		})
 		if err != nil {
@@ -156,8 +156,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		}
 	}
 
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(copyInstallAutomationAction, nil)
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(copyInstallAutomationAction, nil)
 		if err != nil {
 			return err
 		}
@@ -172,15 +172,15 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		return fmt.Errorf("failed to copy installer automation - %w", err)
 	}
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(copyInstallAutomationAction, nil)
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(copyInstallAutomationAction, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(unmapKernelRAMDiskAction, nil)
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(unmapKernelRAMDiskAction, nil)
 		if err != nil {
 			return err
 		}
@@ -191,15 +191,15 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		return fmt.Errorf("failed to un-map rd - %w", err)
 	}
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(unmapKernelRAMDiskAction, nil)
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(unmapKernelRAMDiskAction, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	if config.BeforeActionFn != nil {
-		err := config.BeforeActionFn(makeNewISOAction, nil)
+	if config.OptBeforeActionFn != nil {
+		err := config.OptBeforeActionFn(makeNewISOAction, nil)
 		if err != nil {
 			return err
 		}
@@ -229,8 +229,8 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 			mkhybrid.String(), err, out)
 	}
 
-	if config.AfterActionFn != nil {
-		err := config.AfterActionFn(makeNewISOAction, nil)
+	if config.OptAfterActionFn != nil {
+		err := config.OptAfterActionFn(makeNewISOAction, nil)
 		if err != nil {
 			return err
 		}
@@ -260,8 +260,8 @@ type BuildISOConfig struct {
 	OptAutoinstallFilePath string
 	OptInstallsiteDirPath  string
 	PreserveSiteTarIDs     bool
-	BeforeActionFn         func(string, map[string]string) error
-	AfterActionFn          func(string, map[string]string) error
+	OptBeforeActionFn      func(string, map[string]string) error
+	OptAfterActionFn       func(string, map[string]string) error
 }
 
 func (o *BuildISOConfig) validate() error {

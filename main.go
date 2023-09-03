@@ -240,8 +240,8 @@ func mainWithError(osArgs []string) error {
 		OptAutoinstallFilePath: *autoinstallFilePath,
 		OptInstallsiteDirPath:  *installsiteDirPath,
 		PreserveSiteTarIDs:     *preserveSiteTarIDs,
-		BeforeActionFn:         beforeFn,
-		AfterActionFn:          afterFn,
+		OptBeforeActionFn:      beforeFn,
+		OptAfterActionFn:       afterFn,
 	})
 	if err != nil {
 		return err
