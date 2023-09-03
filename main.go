@@ -113,8 +113,8 @@ func mainWithError(osArgs []string) error {
 	autoinstallFilePath := flagSet.String(
 		autoinstallArg,
 		"",
-		"The path to the autoinstall configuration file (see also:\n"+
-			"'man autoinstall')")
+		"Optionally provide the path to an autoinstall(8) configuration file\n"+
+			"to include in the ISO")
 	installsiteDirPath := flagSet.String(
 		installsiteDirArg,
 		"",
@@ -234,15 +234,15 @@ func mainWithError(osArgs []string) error {
 	}
 
 	err = cache.BuildISO(ctx, &mkobsd.BuildISOConfig{
-		ISOOutputPath:       *isoOutputPath,
-		Mirror:              *isoMirror,
-		Release:             *release,
-		Arch:                *cpuArch,
-		AutoinstallFilePath: *autoinstallFilePath,
-		InstallsiteDirPath:  *installsiteDirPath,
-		PreserveSiteTarIDs:  *preserveSiteTarIDs,
-		BeforeActionFn:      beforeFn,
-		AfterActionFn:       afterFn,
+		ISOOutputPath:          *isoOutputPath,
+		Mirror:                 *isoMirror,
+		Release:                *release,
+		Arch:                   *cpuArch,
+		OptAutoinstallFilePath: *autoinstallFilePath,
+		OptInstallsiteDirPath:  *installsiteDirPath,
+		PreserveSiteTarIDs:     *preserveSiteTarIDs,
+		BeforeActionFn:         beforeFn,
+		AfterActionFn:          afterFn,
 	})
 	if err != nil {
 		return err

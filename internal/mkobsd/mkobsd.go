@@ -253,15 +253,15 @@ func pathExists(filePath string) (bool, os.FileInfo, error) {
 }
 
 type BuildISOConfig struct {
-	ISOOutputPath       string
-	Mirror              string
-	Release             string
-	Arch                string
-	AutoinstallFilePath string
-	InstallsiteDirPath  string
-	PreserveSiteTarIDs  bool
-	BeforeActionFn      func(string, map[string]string) error
-	AfterActionFn       func(string, map[string]string) error
+	ISOOutputPath          string
+	Mirror                 string
+	Release                string
+	Arch                   string
+	OptAutoinstallFilePath string
+	OptInstallsiteDirPath  string
+	PreserveSiteTarIDs     bool
+	BeforeActionFn         func(string, map[string]string) error
+	AfterActionFn          func(string, map[string]string) error
 }
 
 func (o *BuildISOConfig) validate() error {
@@ -286,30 +286,30 @@ func (o *BuildISOConfig) validate() error {
 		return errors.New("cpu architecture is empty")
 	}
 
-	if o.AutoinstallFilePath != "" {
-		if !filepath.IsAbs(o.AutoinstallFilePath) {
+	if o.OptAutoinstallFilePath != "" {
+		if !filepath.IsAbs(o.OptAutoinstallFilePath) {
 			return errors.New("auto_install config file path must be absolute")
 		}
 
-		_, err := os.Stat(o.AutoinstallFilePath)
+		_, err := os.Stat(o.OptAutoinstallFilePath)
 		if err != nil {
 			return err
 		}
 	}
 
-	if o.InstallsiteDirPath != "" {
-		if !filepath.IsAbs(o.InstallsiteDirPath) {
+	if o.OptInstallsiteDirPath != "" {
+		if !filepath.IsAbs(o.OptInstallsiteDirPath) {
 			return errors.New("install.site directory path must be absolute")
 		}
 
-		info, err := os.Stat(o.InstallsiteDirPath)
+		info, err := os.Stat(o.OptInstallsiteDirPath)
 		if err != nil {
 			return err
 		}
 
 		if !info.IsDir() {
 			return fmt.Errorf("install.site dir path is not a directory ('%s')",
-				o.InstallsiteDirPath)
+				o.OptInstallsiteDirPath)
 		}
 	}
 
@@ -432,9 +432,9 @@ type copyInstallAutomationConfig struct {
 }
 
 func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInstallAutomationConfig) error {
-	if config.ISOConfig.AutoinstallFilePath != "" {
+	if config.ISOConfig.OptAutoinstallFilePath != "" {
 		err := copyFilePathToWithMode(
-			config.ISOConfig.AutoinstallFilePath,
+			config.ISOConfig.OptAutoinstallFilePath,
 			filepath.Join(config.RDDirPath, "auto_install.conf"),
 			0644)
 		if err != nil {
@@ -442,14 +442,14 @@ func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInsta
 		}
 	}
 
-	if config.ISOConfig.InstallsiteDirPath != "" {
+	if config.ISOConfig.OptInstallsiteDirPath != "" {
 		siteParentDirPath := filepath.Join(
 			config.ISODirPath,
 			config.ISOConfig.Release,
 			config.ISOConfig.Arch)
 
 		err := createInstallsiteTar(ctx, createInstallsiteTarConfig{
-			SiteDirPath: config.ISOConfig.InstallsiteDirPath,
+			SiteDirPath: config.ISOConfig.OptInstallsiteDirPath,
 			OutDirPath:  siteParentDirPath,
 			Release:     config.ISOConfig.Release,
 			PreserveIDs: config.ISOConfig.PreserveSiteTarIDs,
