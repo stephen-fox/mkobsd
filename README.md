@@ -8,13 +8,14 @@ the ISO file itself.
 
 ## Features
 
-- Easily automates the creation of unattended OpenBSD installer images
+- Automates the creation of unattended OpenBSD installer images
   (note: interactive installations are also supported)
 - Automatic downloading and verification of original OpenBSD ISO images.
-  Original ISOs are stored in a dedicated, configurable directory
-- Optionally specify an [autoinstall(7)][autoinstall] configuration file
-- Optionally specify an [install.site(58)][install.site] script and
-  a directory containing files that will be dropped in `/` at install-time.
+  Original ISOs are stored in a configurable directory
+- Optionally specify an [autoinstall(8)][autoinstall] configuration file
+  to be included in the new ISO
+- Optionally specify an [install.site(5)][install.site] script and
+  a directory containing files that will be dropped in `/` at install-time
   (note: by default, the file ownership is not preserved and `root:wheel`
   is used)
 
@@ -29,7 +30,7 @@ applications from source in a secure manner. By default, applications
 are copied into `~/go/bin/`.
 
 You must first [install Go](https://golang.org/doc/install). After installing
-Go, simply run the following commands to install the applications:
+Go, run the following commands to install the applications:
 
 ```sh
 go install gitlab.com/stephen-fox/mkobsd@latest
