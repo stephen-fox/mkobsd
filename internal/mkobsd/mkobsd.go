@@ -12,31 +12,41 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 type BuildCache struct {
 	BasePath       string
-	BaseDirsPerm   fs.FileMode
 	HTTPClient     *http.Client
 	DebugISOVerify bool
 	dlcDirPath     string
+	buildUserInfo  *userInfo
 	setupOnce      sync.Once
 }
 
 func (o *BuildCache) setup() error {
+	if o.buildUserInfo == nil {
+		const buildUsername = "build"
+
+		userInfo, err := lookupUser(buildUsername)
+		if err != nil {
+			return fmt.Errorf("failed to lookup user: '%s' - %w", buildUsername, err)
+		}
+
+		o.buildUserInfo = userInfo
+	}
+
 	if o.HTTPClient == nil {
 		o.HTTPClient = http.DefaultClient
 	}
 
 	if !filepath.IsAbs(o.BasePath) {
 		return fmt.Errorf("base path is not absolute ('%s')", o.BasePath)
-	}
-
-	if o.BaseDirsPerm == 0 {
-		return errors.New("base directory permissions not set")
 	}
 
 	_, baseInfo, err := pathExists(o.BasePath)
@@ -50,13 +60,46 @@ func (o *BuildCache) setup() error {
 
 	o.dlcDirPath = filepath.Join(o.BasePath, "downloads")
 
-	err = os.MkdirAll(o.dlcDirPath, o.BaseDirsPerm)
+	err = os.MkdirAll(o.dlcDirPath, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to create dlc dir '%s' - %w",
 			o.dlcDirPath, err)
 	}
 
 	return nil
+}
+
+func lookupUser(username string) (*userInfo, error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, fmt.Errorf("lookup failed - %w", err)
+	}
+
+	uid, err := strconv.ParseInt(u.Uid, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert uid string '%s' to int - %w",
+			u.Uid, err)
+	}
+
+	gid, err := strconv.ParseInt(u.Gid, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert gid string '%s' to int - %w",
+			u.Gid, err)
+	}
+
+	return &userInfo{
+		Name:        username,
+		UID:         uint32(uid),
+		GID:         uint32(gid),
+		HomeDirPath: u.HomeDir,
+	}, nil
+}
+
+type userInfo struct {
+	Name        string
+	UID         uint32
+	GID         uint32
+	HomeDirPath string
 }
 
 const (
@@ -377,9 +420,10 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 }
 
 func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
-	dirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
-	isoPath := filepath.Join(dirPath, config.isoName())
-	sha256SigPath := filepath.Join(dirPath, config.sha256SigName())
+	finalOutputDirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
+
+	isoPath := filepath.Join(finalOutputDirPath, config.isoName())
+	sha256SigPath := filepath.Join(finalOutputDirPath, config.sha256SigName())
 
 	verifyConfig := signifyVerifyConfig{
 		PubKeyPath:       "/etc/signify/openbsd-" + config.releaseID() + "-base.pub",
@@ -387,7 +431,7 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 		FileNameToVerify: config.isoName(),
 	}
 
-	err := signifyVerify(ctx, verifyConfig)
+	err := signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
 	if err == nil {
 		return isoPath, nil
 	}
@@ -396,33 +440,104 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 		return "", ctx.Err()
 	}
 
-	err = os.MkdirAll(dirPath, 0700)
+	err = os.MkdirAll(finalOutputDirPath, 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create dlc iso path '%s' - %w", dirPath, err)
+		return "", fmt.Errorf("failed to create dlc release path '%s' - %w",
+			finalOutputDirPath, err)
 	}
 
-	err = httpGetToFilePath(ctx, o.HTTPClient, config.sha256SigUrl(), sha256SigPath)
+	// TODO: I would prefer to create the directory in /tmp,
+	// but that causes the file renames to fail because /tmp
+	// is on a different partition. As a result, the rename
+	// calls fail with: "cross-device link".
+	tmpDirPath, err := os.MkdirTemp(o.dlcDirPath, ".mkobsd-iso-download-")
 	if err != nil {
-		return "", fmt.Errorf("failed to http get sha256 file '%s' - %w",
-			config.sha256SigUrl(), err)
+		return "", fmt.Errorf("failed to create temp iso download dir - %w", err)
+	}
+	if !o.DebugISOVerify && tmpDirPath != "/" {
+		defer os.RemoveAll(tmpDirPath)
 	}
 
-	err = httpGetToFilePath(ctx, o.HTTPClient, config.isoUrl(), isoPath)
+	err = os.Chown(tmpDirPath, int(o.buildUserInfo.UID), int(o.buildUserInfo.GID))
 	if err != nil {
-		return "", fmt.Errorf("failed to http get openbsd iso '%s' - %w",
-			config.isoUrl(), err)
+		return "", fmt.Errorf("failed to chown temp iso download dir - %w", err)
 	}
 
-	err = signifyVerify(ctx, verifyConfig)
-	if err != nil {
-		if !o.DebugISOVerify {
-			_ = os.Remove(isoPath)
-		}
+	sigTmpPath := filepath.Join(tmpDirPath, filepath.Base(sha256SigPath))
+	isoTmpPath := filepath.Join(tmpDirPath, filepath.Base(isoPath))
+	verifyTmpConfig := verifyConfig
+	verifyTmpConfig.DotSigPath = sigTmpPath
 
+	err = execFTPAs(ctx, o.buildUserInfo, config.sha256SigUrl(), sigTmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to http get sha256 file '%s' into '%s' - %w",
+			config.sha256SigUrl(), sigTmpPath, err)
+	}
+
+	err = execFTPAs(ctx, o.buildUserInfo, config.isoUrl(), isoTmpPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to http get openbsd iso '%s' into '%s' - %w",
+			config.isoUrl(), isoTmpPath, err)
+	}
+
+	err = signifyVerifyAs(ctx, o.buildUserInfo, verifyTmpConfig)
+	if err != nil {
 		return "", err
 	}
 
+	err = os.Chown(sigTmpPath, 0, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to chown tmp sig file to root:wheel - %w", err)
+	}
+
+	err = os.Chown(isoTmpPath, 0, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to chown tmp iso file to root:wheel - %w", err)
+	}
+
+	err = os.Rename(sigTmpPath, sha256SigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to rename '%s' to '%s' - %w",
+			sigTmpPath, sha256SigPath, err)
+	}
+
+	err = os.Rename(isoTmpPath, isoPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to rename '%s' to '%s' - %w",
+			isoTmpPath, isoPath, err)
+	}
+
 	return isoPath, nil
+}
+
+func execFTPAs(ctx context.Context, u *userInfo, urlStr string, outputPath string) error {
+	const ftpExePath = "/usr/bin/ftp"
+
+	ftp := exec.CommandContext(ctx,
+		ftpExePath,
+		"-M",
+		"-o", outputPath,
+		urlStr)
+
+	ftp.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: u.UID,
+			Gid: u.GID,
+		},
+	}
+
+	ftp.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + u.HomeDirPath,
+	}
+
+	out, err := ftp.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to execute '%s' - %w - output: %s",
+			ftp.String(), err, out)
+	}
+
+	return nil
 }
 
 type copyInstallAutomationConfig struct {
@@ -498,12 +613,24 @@ type signifyVerifyConfig struct {
 	FileNameToVerify string
 }
 
-func signifyVerify(ctx context.Context, config signifyVerifyConfig) error {
+func signifyVerifyAs(ctx context.Context, u *userInfo, config signifyVerifyConfig) error {
 	signify := exec.CommandContext(ctx, "/usr/bin/signify",
 		"-C",
 		"-p", config.PubKeyPath,
 		"-x", config.DotSigPath,
 		config.FileNameToVerify)
+
+	signify.SysProcAttr = &syscall.SysProcAttr{
+		Credential: &syscall.Credential{
+			Uid: u.UID,
+			Gid: u.GID,
+		},
+	}
+
+	signify.Env = []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + u.HomeDirPath,
+	}
 
 	signify.Dir = filepath.Dir(config.DotSigPath)
 

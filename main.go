@@ -47,7 +47,6 @@ OPTIONS
 	advHelpArg            = "H"
 	isoOutputPathArg      = "o"
 	baseDirPathArg        = "B"
-	dirPermArg            = "M"
 	releaseArg            = "r"
 	cpuArchArg            = "a"
 	isoMirrorArg          = "m"
@@ -91,11 +90,6 @@ func mainWithError(osArgs []string) error {
 		baseDirPathArg,
 		defaultBaseDirPath,
 		"The base directory for builds")
-	baseDirsPerm := filePermFlag{perm: 0755}
-	flagSet.Var(
-		&baseDirsPerm,
-		dirPermArg,
-		"The default file mode permission bits for build directories\n")
 	release := flagSet.String(
 		releaseArg,
 		"",
@@ -189,7 +183,6 @@ func mainWithError(osArgs []string) error {
 
 	cache := &mkobsd.BuildCache{
 		BasePath:       *baseDirPath,
-		BaseDirsPerm:   baseDirsPerm.perm,
 		HTTPClient:     http.DefaultClient,
 		DebugISOVerify: *debugVerifyISO,
 	}
