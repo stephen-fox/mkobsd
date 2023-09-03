@@ -31,6 +31,7 @@ the ISO file itself.
 - An OpenBSD system (the application can be compiled on any OS, but it
   relies on tools included with OpenBSD)
 - Go (Golang)
+- Must be run as `root` (sadly, it needs to do too many things as root)
 
 ## Installation
 
