@@ -46,10 +46,9 @@ OPTIONS
 
 	helpArg               = "h"
 	advHelpArg            = "H"
-	commandModeArg        = "c"
 	isoOutputPathArg      = "o"
-	baseDirPathArg        = "b"
-	dirPermArg            = "p"
+	baseDirPathArg        = "B"
+	dirPermArg            = "M"
 	releaseArg            = "r"
 	cpuArchArg            = "a"
 	isoMirrorArg          = "m"
