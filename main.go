@@ -1,4 +1,4 @@
-// mkobsd creates custom OpenBSD ISO images for automated installations.
+// mkobsd automates the creation of OpenBSD installer ISO images.
 package main
 
 import (
@@ -29,11 +29,10 @@ DESCRIPTION
   ` + appName + ` automates the creation of OpenBSD installer ISO images.
 
   It was designed to create unattended installer images by including
-  an auto_install.conf file and/or an install.site script and tar set
-  in the ISO file itself. For more information regarding OpenBSD
-  installer automation, please refer to the manual pages mentioned
-  in the SEE ALSO section.
+  an autoinstall file and/or an install.site script and tar set in
+  the ISO file itself.
 
+EXAMPLES
   For examples, please execute: ` + appName + ` -` + advHelpArg + `
 
 SEE ALSO
@@ -126,7 +125,7 @@ func mainWithError(osArgs []string) error {
 		preserveSiteTarIDsArg,
 		false,
 		"Preserve UID and GIDs of the install.site directory when creating a tar.\n"+
-			"Defaults to not preserving UIDs and GIDs (root:wheel is used)")
+			"If unspecified, root:wheel is used")
 	logTimestamps := flagSet.Bool(
 		logTimestampsArg,
 		false,
@@ -288,5 +287,5 @@ func (o *filePermFlag) Set(v string) error {
 }
 
 func (o *filePermFlag) String() string {
-	return fmt.Sprintf("%o | %s", o.perm, o.perm.String())
+	return fmt.Sprintf("0o%o | %s", o.perm, o.perm.String())
 }
