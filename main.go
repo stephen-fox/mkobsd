@@ -118,11 +118,11 @@ func mainWithError(osArgs []string) error {
 	installsiteDirPath := flagSet.String(
 		installsiteDirArg,
 		"",
-		"Optionally specify an install.site directory to be included in the\n"+
+		"Optionally specify an install.site(5) directory to be included in the\n"+
 			"resulting ISO file. The directory's contents will be placed in a tar\n"+
 			"archive and extracted to '/' at install time. If an executable file\n"+
 			"named 'install.site' exists at the root of the directory, it will be\n"+
-			"executed by the installer (see also: 'man install.site')")
+			"executed by the installer")
 	preserveSiteTarIDs := flagSet.Bool(
 		preserveSiteTarIDsArg,
 		false,
