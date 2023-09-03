@@ -358,6 +358,8 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 			newISOContentsPath, err)
 	}
 
+	// TODO: It would be nice to replace this with th copyDirectoryTo func.
+	// I think I used cp here because there are a bunch of cases like symlinks.
 	cpISO := exec.CommandContext(
 		ctx,
 		"/bin/cp",
