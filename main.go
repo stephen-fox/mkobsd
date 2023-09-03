@@ -243,7 +243,7 @@ func mainWithError(osArgs []string) error {
 		OptAfterActionFn:       afterFn,
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to build iso - %w", err)
 	}
 
 	return nil
