@@ -196,7 +196,7 @@ func mainWithError(osArgs []string) error {
 	}
 
 	ctx, cancelFn := signal.NotifyContext(context.Background(),
-		syscall.SIGINT, syscall.SIGTERM)
+		syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer cancelFn()
 
 	var beforeFn func(string, map[string]string) error
