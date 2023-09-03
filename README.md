@@ -16,7 +16,7 @@ the ISO file itself.
   to be included in the new ISO
 - Optionally specify an [install.site(5)][install.site] script and
   a directory containing files that will be dropped in `/` at install-time
-  (note: by default, the file ownership is not preserved and `root:wheel`
+  (note: by default, file ownership is not preserved and `root:wheel`
   is used)
 
 [autoinstall]: https://man.openbsd.org/autoinstall.8
