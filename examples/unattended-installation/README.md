@@ -11,18 +11,43 @@ To try this example, do the following:
 
 ## How it works
 
-The [`create.sh`](create.sh) shell script executes `mkobsd` as root. The script points
-mkobsd at the following automation:
+The [`create.sh`](create.sh) shell script executes `mkobsd` as root
+and points it at [`auto_install.conf`](auto_install.conf) and the
+[`generic directory`](generic).
 
-- An [autoinstall configuration file](auto_install.conf). This tells the
-  OpenBSD installer how you would like to customize the OS. Basically, it
-  answers all the interactive questions it normally asks you
-- An [install.site directory](generic). This directory becomes a tar file
-  (known as a "set") that is un-tarred on top of `/` at install-time.
-  It contains two things of interest:
-  - An [`install.site`](generic/install.site) shell script which, when present, is automatically
-    executed when the OS finishes installing prior to reboot
-  - Files and directories that are dropped on-top of `/`. For example,
-    if you create the path `generic/usr/local/bin/example.sh`, then you
-    will find that file in `/usr/local/bin/example.sh` after the installer
-    finishes and reboots
+The following tree describes how this example works:
+
+```
+.
+|--- auto_install.conf // Automates the OpenBSD installer's interactive
+|                      // questions. Refer to "man 8 autoinstall" for
+|                      // more information.
+|
+|--- create.sh         // A shell script that automates the execution
+|                      // of mkobsd. Execute this shell script to
+|                      // generate an ISO file for this example.
+|
++--- generic          // This directory is a special "file set" that is used
+     |                // by install.site(5) to place files and directories
+     |                // in the newly-installed OS's root file system.
+     |                // This directory is copied into a tar.gz file
+     |                // which is untarred just prior to the installer
+     |                // rebooting onto "/". Refer to "man 5 install.site"
+     |                // for more information.
+     |
+     |--- usr/local/bin/example.sh // An example shell script that will
+     |                             // be copied into /usr/local/bin/ when
+     |                             // when the installer finishes.
+     |
+     |--- etc/adduser.conf // This is a copy of OpenBSD's default
+     |                     // /etc/adduser.conf file. This is
+     |                     // needed by the adduser(8) program
+     |                     // when adding a user non-interactively.
+     |
+     +--- install.site     // This shell script is automatically
+                           // executed by the OpenBSD installer
+                           // if it is present in the install.site
+                           // siteXX.tar.gz just prior to reboot.
+                           // Refer to "man 5 install.site" for
+                           // more information.
+```
