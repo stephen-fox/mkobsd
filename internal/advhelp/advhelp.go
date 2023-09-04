@@ -66,7 +66,7 @@ const Usage = `EXAMPLES
 
     echo "@reboot /bin/sh -c '(echo -----BEGIN SSHD PUBLIC KEYS-----; /bin/cat /etc/ssh/*.pub; echo -----END SSHD PUBLIC KEYS-----) > /dev/tty00'" >> /var/cron/tabs/root
 
-    add_admin me 'ecdsa-sha2-nistp256 AAAAAAA buh'
+    add_admin me 'BUH'
 
     /usr/bin/doas -C /etc/doas.conf
 

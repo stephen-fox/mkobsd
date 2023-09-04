@@ -5,7 +5,7 @@ ISO that installs the OS without any user input in a secure manner.
 
 To try this example, do the following:
 
-1. Replace the placeholder SSH public key ending in `buh` with your own in
+1. Replace the placeholder SSH public key (the `BUH` string) with your own in
    [generic/install.site](generic/install.site)
 2. Execute [create.sh](create.sh)
 
