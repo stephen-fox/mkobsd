@@ -27,13 +27,13 @@ The following tree describes how this example works:
 |                      // of mkobsd. Execute this shell script to
 |                      // generate an ISO file for this example.
 |
-+--- generic          // This directory is a special "file set" that is used
-     |                // by install.site(5) to place files and directories
-     |                // in the newly-installed OS's root file system.
-     |                // This directory is copied into a tar.gz file
-     |                // which is untarred just prior to the installer
-     |                // rebooting onto "/". Refer to "man 5 install.site"
-     |                // for more information.
++--- generic           // This directory is a special "file set" that is used
+     |                 // by install.site(5) to place files and directories
+     |                 // in the newly-installed OS's root file system.
+     |                 // This directory is copied into a tar.gz file
+     |                 // which is untarred just prior to the installer
+     |                 // rebooting onto "/". Refer to "man 5 install.site"
+     |                 // for more information.
      |
      |--- usr/local/bin/example.sh // An example shell script that will
      |                             // be copied into /usr/local/bin/ when
