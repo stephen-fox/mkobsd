@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
@@ -22,7 +21,6 @@ import (
 
 type BuildCache struct {
 	BasePath       string
-	HTTPClient     *http.Client
 	DebugISOVerify bool
 	dlcDirPath     string
 	buildUserInfo  *userInfo
@@ -39,10 +37,6 @@ func (o *BuildCache) setup() error {
 		}
 
 		o.buildUserInfo = userInfo
-	}
-
-	if o.HTTPClient == nil {
-		o.HTTPClient = http.DefaultClient
 	}
 
 	if !filepath.IsAbs(o.BasePath) {

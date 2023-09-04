@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -183,7 +182,6 @@ func mainWithError(osArgs []string) error {
 
 	cache := &mkobsd.BuildCache{
 		BasePath:       *baseDirPath,
-		HTTPClient:     http.DefaultClient,
 		DebugISOVerify: *debugVerifyISO,
 	}
 
