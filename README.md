@@ -11,7 +11,8 @@ the ISO file itself.
 - Automates the creation of unattended OpenBSD installer images
   (note: interactive installations are also supported)
 - Automatic downloading and verification of original OpenBSD ISO images.
-  Original ISOs are stored in a configurable directory
+  Original ISOs are cached in a configurable directory to improve build
+  times and are re-verified on each build
 - Downloading and verification of the original OpenBSD ISO are carried
   out by `ftp(1)` and `signify(1)` as a non-root user. Both applications
   implement `pledge(2)`, adding a meaningful security barrier between
