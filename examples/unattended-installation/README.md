@@ -11,7 +11,7 @@ To try this example, do the following:
 
 ## How it works
 
-The `create.sh` shell script executes `mkobsd` as root. The script points
+The [`create.sh`](create.sh) shell script executes `mkobsd` as root. The script points
 mkobsd at the following automation:
 
 - An [autoinstall configuration file](auto_install.conf). This tells the
@@ -20,7 +20,7 @@ mkobsd at the following automation:
 - An [install.site directory](generic). This directory becomes a tar file
   (known as a "set") that is un-tarred on top of `/` at install-time.
   It contains two things of interest:
-  - An `install.site` shell script which, when present, is automatically
+  - An [`install.site`](generic/install.site) shell script which, when present, is automatically
     executed when the OS finishes installing prior to reboot
   - Files and directories that are dropped on-top of `/`. For example,
     if you create the path `generic/usr/local/bin/example.sh`, then you
