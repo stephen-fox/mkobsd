@@ -59,6 +59,20 @@ doas cp ~/go/bin/mkobsd /usr/local/bin/
 
 Please refer to the [examples](examples) directory.
 
+## For new OpenBSD users
+
+If you are new to OpenBSD, I recommend reading the [About OpenBSD][about]
+page. OpenBSD is a minimalistic operating system focused on simplicity and
+security. The installation workflow and its customization are documented in
+the [Overview of the Installation Procedure FAQ][installation].
+
+Installation is normally accomplished using interactive text prompts.
+mkobsd makes it easy to automate these interactive prompts and/or
+supplement the default installer behavior with automation.
+
+[about]: https://www.openbsd.org/faq/faq1.html#WhatIs
+[installation]: https://www.openbsd.org/faq/faq4.html#bsd.rd
+
 ## Troubleshooting
 
 The `-D` option enables debug mode, which is very useful for troubleshooting.
