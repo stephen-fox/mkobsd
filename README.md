@@ -78,7 +78,7 @@ supplement the default installer behavior with automation.
 The `-D` option enables debug mode, which is very useful for troubleshooting.
 In debug mode, mkobsd will pause after executing each stage of the build.
 This allows users to inspect the build directory and files as the build
-runs. Additional information about the build is provided in the log messages.
+runs. Additional information about the build is provided in log messages.
 
 ## Special thanks
 
