@@ -16,7 +16,7 @@ const Usage = `EXAMPLES
     ./create.sh
     ./generic/etc/adduser.conf
     ./generic/install.site
-    ./generic/usr/local/bin/this-ends-up-in-usr-local-bin.sh
+    ./generic/usr/local/bin/example.sh
 
     $ cat create.sh
     #!/bin/sh
@@ -45,6 +45,14 @@ const Usage = `EXAMPLES
 
     $ cat generic/install.site
     #!/bin/sh
+
+    # This shell script is automatically executed by the OpenBSD installer
+    # when it finishes running, just prior to rebooting. It creates an
+    # admin user with the username "me". Make sure to replace the placeholder
+    # SSH public key (the "BUH" argument to add_admin) prior to building
+    # the example.
+    #
+    # Refer to "man 5 install.site" for more information.
 
     set -ex
 
