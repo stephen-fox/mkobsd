@@ -59,6 +59,13 @@ doas cp ~/go/bin/mkobsd /usr/local/bin/
 
 Please refer to the [examples](examples) directory.
 
+## Troubleshooting
+
+The `-D` option enables debug mode, which is very useful for troubleshooting.
+In debug mode, mkobsd will pause after executing each stage of the build.
+This allows users to inspect the build directory and files as the build
+runs. Additional information about the build is provided in the log messages.
+
 ## Special thanks
 
 This project was heavily inspired by Tim Baumgard's
