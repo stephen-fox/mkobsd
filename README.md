@@ -85,3 +85,7 @@ runs. Additional information about the build is provided in log messages.
 This project was heavily inspired by Tim Baumgard's
 [openbsd-custom-image](https://github.com/tbaumgard/openbsd-custom-image)
 project. Thank you, Tim.
+
+A lorge thank you to [Seung Kang](https://github.com/SeungKang) for reading
+over the project's documentation and providing feedback. Seung also tested
+an image produced by the application. Thank you Seung <3
