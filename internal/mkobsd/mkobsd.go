@@ -508,7 +508,17 @@ func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsd
 		FileNameToVerify: config.installerFileName(),
 	}
 
-	err := signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
+	// Perform this check here becasue we ignore will end up
+	// ignoring the error and wasting time on an installer
+	// download that will inevitably fail verification.
+	_, err := os.Stat(verifyConfig.PubKeyPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to stat openbsd installer signer public key file "+
+			"(note: if you are building an installer for a newer version of openbsd,"+
+			"you may need to copy this file from the openbsd source code) - %w", err)
+	}
+
+	err = signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
 	if err == nil {
 		return installerPath, nil
 	}
