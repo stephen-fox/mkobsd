@@ -49,10 +49,11 @@ OPTIONS
 	releaseArg            = "r"
 	cpuArchArg            = "a"
 	isoMirrorArg          = "m"
+	installerTypeArg      = "t"
 	autoinstallArg        = "i"
 	installsiteDirArg     = "d"
 	preserveSiteTarIDsArg = "P"
-	logTimestampsArg      = "t"
+	logTimestampsArg      = "T"
 	debugArg              = "D"
 	debugVerifyISOArg     = "K"
 
@@ -77,35 +78,48 @@ func mainWithError(osArgs []string) error {
 		helpArg,
 		false,
 		"Display this information")
+
 	advHelp := flagSet.Bool(
 		advHelpArg,
 		false,
 		"Display advanced usage information and examples")
-	isoOutputPath := flagSet.String(
+
+	installerOutputPath := flagSet.String(
 		isoOutputPathArg,
 		"",
 		"The file path to save the resulting .iso file to")
+
 	baseDirPath := flagSet.String(
 		baseDirPathArg,
 		defaultBaseDirPath,
 		"The base directory for builds")
+
 	release := flagSet.String(
 		releaseArg,
 		"",
 		"OpenBSD release version (e.g., '7.3')")
+
 	cpuArch := flagSet.String(
 		cpuArchArg,
 		"",
 		"Target CPU architecture (e.g., 'amd64')")
+
 	isoMirror := flagSet.String(
 		isoMirrorArg,
 		"https://cdn.openbsd.org/pub/OpenBSD",
 		"OpenBSD mirror URL")
+
+	installerType := flagSet.String(
+		installerTypeArg,
+		"iso",
+		"The installer image type (only 'iso' and 'img' are supported)\n")
+
 	autoinstallFilePath := flagSet.String(
 		autoinstallArg,
 		"",
 		"Optionally provide the path to an autoinstall(8) configuration file\n"+
 			"to include in the ISO")
+
 	installsiteDirPath := flagSet.String(
 		installsiteDirArg,
 		"",
@@ -114,20 +128,24 @@ func mainWithError(osArgs []string) error {
 			"archive and extracted to '/' at install time. If an executable file\n"+
 			"named 'install.site' exists at the root of the directory, it will be\n"+
 			"executed by the installer")
+
 	preserveSiteTarIDs := flagSet.Bool(
 		preserveSiteTarIDsArg,
 		false,
 		"Preserve UID and GIDs of the install.site directory when creating a tar.\n"+
 			"If unspecified, root:wheel is used")
+
 	logTimestamps := flagSet.Bool(
 		logTimestampsArg,
 		false,
 		"Include timestamps in log messages")
+
 	debug := flagSet.Bool(
 		debugArg,
 		false,
 		"Enable debug mode. This allows the user to step through each\nstage of the build workflow. May also be enabled by setting\n"+
 			"the '"+debugEnvName+"' environment variable to 'true'")
+
 	debugVerifyISO := flagSet.Bool(
 		debugVerifyISOArg,
 		false,
@@ -181,8 +199,8 @@ func mainWithError(osArgs []string) error {
 	}
 
 	cache := &mkobsd.BuildCache{
-		BasePath:       *baseDirPath,
-		DebugISOVerify: *debugVerifyISO,
+		BasePath:    *baseDirPath,
+		DebugVerify: *debugVerifyISO,
 	}
 
 	ctx, cancelFn := signal.NotifyContext(context.Background(),
@@ -222,11 +240,12 @@ func mainWithError(osArgs []string) error {
 		}
 	}
 
-	err = cache.BuildISO(ctx, &mkobsd.BuildISOConfig{
-		ISOOutputPath:          *isoOutputPath,
+	err = cache.Build(ctx, &mkobsd.BuildConfig{
+		InstallerOutputPath:    *installerOutputPath,
 		Mirror:                 *isoMirror,
 		Release:                *release,
 		Arch:                   *cpuArch,
+		InstallerType:          *installerType,
 		OptAutoinstallFilePath: *autoinstallFilePath,
 		OptInstallsiteDirPath:  *installsiteDirPath,
 		PreserveSiteTarIDs:     *preserveSiteTarIDs,

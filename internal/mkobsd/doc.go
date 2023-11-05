@@ -1,3 +1,2 @@
-// Package mkobsd provides functionality for building
-// OpenBSD installer .iso files.
+// Package mkobsd provides functionality for building OpenBSD installers.
 package mkobsd

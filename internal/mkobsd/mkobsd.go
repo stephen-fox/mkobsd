@@ -20,11 +20,11 @@ import (
 )
 
 type BuildCache struct {
-	BasePath       string
-	DebugISOVerify bool
-	dlcDirPath     string
-	buildUserInfo  *userInfo
-	setupOnce      sync.Once
+	BasePath      string
+	DebugVerify   bool
+	dlcDirPath    string
+	buildUserInfo *userInfo
+	setupOnce     sync.Once
 }
 
 func (o *BuildCache) setup() error {
@@ -98,14 +98,14 @@ type userInfo struct {
 
 const (
 	setupAction                 = "setup"
-	extractOpenBSDIsoAction     = "extract-obsd-iso"
+	setupOpenBSDInstallerTree   = "setup-obsd-installer-tree"
 	mapKernelRAMDiskAction      = "map-kernel-ram-disk"
 	copyInstallAutomationAction = "copy-install-automation"
 	unmapKernelRAMDiskAction    = "unmap-kernel-ram-disk"
 	makeNewISOAction            = "make-new-iso"
 )
 
-func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error {
+func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 	if config.OptBeforeActionFn != nil {
 		err := config.OptBeforeActionFn(setupAction, nil)
 		if err != nil {
@@ -123,10 +123,12 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 
 	err = config.validate()
 	if err != nil {
-		return fmt.Errorf("failed to validate iso config - %w", err)
+		return fmt.Errorf("failed to validate build config - %w", err)
 	}
 
-	buildDirPath, err := os.MkdirTemp(o.BasePath, ".build-"+filepath.Base(config.ISOOutputPath)+"-")
+	buildDirPath, err := os.MkdirTemp(
+		o.BasePath,
+		".build-"+filepath.Base(config.InstallerOutputPath)+"-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp build directory - %w", err)
 	}
@@ -142,32 +144,56 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	}
 
 	if config.OptBeforeActionFn != nil {
-		err := config.OptBeforeActionFn(extractOpenBSDIsoAction, nil)
+		err := config.OptBeforeActionFn(setupOpenBSDInstallerTree, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	newISODirPath, err := o.extractOpenbsdISO(ctx, buildDirPath, openbsdSrcFilesConfig{
+	var installerDirPath string
+	var earlyUnmountFn func(context.Context) error
+	var optImgPath string
+
+	originalInstallerPath, err := o.findOrDownloadInstaller(ctx, openbsdSrcFilesConfig{
 		Mirror:  config.Mirror,
 		Release: config.Release,
 		Arch:    config.Arch,
+		FileExt: config.InstallerType,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to extract openbsd iso - %w", err)
+		return fmt.Errorf("failed to find or download openbsd installer - %w", err)
 	}
-	defer os.RemoveAll(newISODirPath)
+
+	switch config.InstallerType {
+	case "iso":
+		installerDirPath, err = o.extractOpenbsdISO(ctx, originalInstallerPath, buildDirPath)
+		if err != nil {
+			return fmt.Errorf("failed to extract openbsd iso - %w", err)
+		}
+		defer os.RemoveAll(installerDirPath)
+	case "img":
+		optImgPath, installerDirPath, earlyUnmountFn, err = o.copyAndMountOpenbsdImg(
+			ctx,
+			originalInstallerPath,
+			buildDirPath)
+		if err != nil {
+			return fmt.Errorf("failed to create new openbsd img - %w", err)
+		}
+		defer earlyUnmountFn(context.Background())
+	default:
+		return fmt.Errorf("unsupported installer type: %q", config.InstallerType)
+	}
 
 	if config.OptAfterActionFn != nil {
-		err := config.OptAfterActionFn(extractOpenBSDIsoAction, map[string]string{
-			"extracted-iso-dir-path": newISODirPath,
+		err := config.OptAfterActionFn(setupOpenBSDInstallerTree, map[string]string{
+			"dir-path": installerDirPath,
 		})
 		if err != nil {
 			return err
 		}
 	}
 
-	rdFilePath := filepath.Join(newISODirPath, config.Release, config.Arch, "bsd.rd")
+	rdFilePath := filepath.Join(installerDirPath, config.Release, config.Arch, "bsd.rd")
 
 	if config.OptBeforeActionFn != nil {
 		err := config.OptBeforeActionFn(mapKernelRAMDiskAction, map[string]string{
@@ -201,9 +227,9 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 	}
 
 	err = o.copyInstallAutomation(ctx, copyInstallAutomationConfig{
-		ISOConfig:  config,
-		ISODirPath: newISODirPath,
-		RDDirPath:  rdMountDirPath,
+		BuildConfig:      config,
+		InstallerDirPath: installerDirPath,
+		RDDirPath:        rdMountDirPath,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to copy installer automation - %w", err)
@@ -235,6 +261,20 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		}
 	}
 
+	if config.InstallerType == "img" {
+		err = earlyUnmountFn(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to unmount new img - %w", err)
+		}
+
+		err = os.Rename(optImgPath, config.InstallerOutputPath)
+		if err != nil {
+			return fmt.Errorf("failed to move new img to output path - %w", err)
+		}
+
+		return nil
+	}
+
 	if config.OptBeforeActionFn != nil {
 		err := config.OptBeforeActionFn(makeNewISOAction, nil)
 		if err != nil {
@@ -250,18 +290,18 @@ func (o *BuildCache) BuildISO(ctx context.Context, config *BuildISOConfig) error
 		ctx,
 		mkhybridPath,
 		"-a", "-R", "-T", "-L", "-l", "-d", "-D", "-N",
-		"-o", config.ISOOutputPath,
+		"-o", config.InstallerOutputPath,
 		"-v", "-v",
 		"-A", volumeID,
 		"-P", "Copyright (c) Theo de Raadt <deraadt@openbsd.org>",
 		"-V", volumeID,
 		"-b", relArch+"/cdbr",
 		"-c", relArch+"/boot.catalog",
-		newISODirPath)
+		installerDirPath)
 
 	out, err := mkhybrid.CombinedOutput()
 	if err != nil {
-		_ = os.Remove(config.ISOOutputPath)
+		_ = os.Remove(config.InstallerOutputPath)
 		return fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
 			mkhybrid.String(), err, out)
 	}
@@ -289,11 +329,12 @@ func pathExists(filePath string) (bool, os.FileInfo, error) {
 	return true, info, nil
 }
 
-type BuildISOConfig struct {
-	ISOOutputPath          string
+type BuildConfig struct {
+	InstallerOutputPath    string
 	Mirror                 string
 	Release                string
 	Arch                   string
+	InstallerType          string
 	OptAutoinstallFilePath string
 	OptInstallsiteDirPath  string
 	PreserveSiteTarIDs     bool
@@ -301,14 +342,21 @@ type BuildISOConfig struct {
 	OptAfterActionFn       func(string, map[string]string) error
 }
 
-func (o *BuildISOConfig) validate() error {
-	if o.ISOOutputPath == "" {
+func (o *BuildConfig) validate() error {
+	switch o.InstallerType {
+	case "iso", "img":
+		// OK.
+	default:
+		return fmt.Errorf("unsupported installer type: %q", o.InstallerType)
+	}
+
+	if o.InstallerOutputPath == "" {
 		return errors.New("iso output path is empty")
 	}
 
-	isoAlreadyExists, _, _ := pathExists(o.ISOOutputPath)
-	if isoAlreadyExists {
-		return fmt.Errorf("a file or directory already exists at '%s'", o.ISOOutputPath)
+	installerAlreadyExists, _, _ := pathExists(o.InstallerOutputPath)
+	if installerAlreadyExists {
+		return fmt.Errorf("a file or directory already exists at '%s'", o.InstallerOutputPath)
 	}
 
 	if o.Mirror == "" {
@@ -353,7 +401,7 @@ func (o *BuildISOConfig) validate() error {
 	return nil
 }
 
-func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string, filesConfig openbsdSrcFilesConfig) (string, error) {
+func (o *BuildCache) extractOpenbsdISO(ctx context.Context, isoPath string, buildDirPath string) (string, error) {
 	baseISOMountPath := filepath.Join(buildDirPath, "base-iso-mnt")
 
 	err := os.MkdirAll(baseISOMountPath, 0700)
@@ -363,15 +411,10 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 	}
 	defer os.Remove(baseISOMountPath)
 
-	baseISOPath, err := o.openbsdISO(ctx, filesConfig)
-	if err != nil {
-		return "", fmt.Errorf("failed to get openbsd iso - %w", err)
-	}
-
-	vndID, unconfigFn, err := allocateVNDForFile(ctx, baseISOPath)
+	vndID, unconfigFn, err := allocateVNDForFile(ctx, isoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to allocate vnd for '%s' - %w",
-			baseISOPath, err)
+			isoPath, err)
 	}
 	defer unconfigFn(context.Background())
 
@@ -380,7 +423,8 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 	unmountFn, err := mount(
 		ctx,
 		[]string{"-t", "cd9660"},
-		vndPath+"c", baseISOMountPath)
+		vndPath+"c",
+		baseISOMountPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to mount base openbsd iso vnd '%s' to '%s' - %w",
 			vndPath, baseISOMountPath, err)
@@ -395,7 +439,7 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 			newISOContentsPath, err)
 	}
 
-	// TODO: It would be nice to replace this with th copyDirectoryTo func.
+	// TODO: It would be nice to replace this with the copyDirectoryTo func.
 	// I think I used cp here because there are a bunch of cases like symlinks.
 	cpISO := exec.CommandContext(
 		ctx,
@@ -406,28 +450,67 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, buildDirPath string,
 	out, err := cpISO.CombinedOutput()
 	if err != nil {
 		_ = os.RemoveAll(newISOContentsPath)
-		return "", fmt.Errorf("failed to execute '%s' - %w - output: '%s'",
+		return "", fmt.Errorf("failed to copy iso files: '%s' - %w - output: '%s'",
 			cpISO.String(), err, out)
 	}
 
 	return newISOContentsPath, nil
 }
 
-func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
+func (o *BuildCache) copyAndMountOpenbsdImg(ctx context.Context, imgPath string, buildDirPath string) (string, string, func(context.Context) error, error) {
+	baseImgMountPath := filepath.Join(buildDirPath, "base-img-mnt")
+
+	err := os.MkdirAll(baseImgMountPath, 0700)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to create base openbsd img mount dir '%s' - %w",
+			baseImgMountPath, err)
+	}
+	defer os.Remove(baseImgMountPath)
+
+	tmpImgPath := filepath.Join(buildDirPath, "new-installer.img")
+
+	err = copyFilePathTo(imgPath, tmpImgPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to copy openbsd img to tmp - %w", err)
+	}
+
+	vndID, unconfigFn, err := allocateVNDForFile(ctx, tmpImgPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to allocate vnd for tmp img '%s' - %w",
+			tmpImgPath, err)
+	}
+	defer unconfigFn(context.Background())
+
+	vndPath := "/dev/" + vndID
+
+	unmountFn, err := mount(
+		ctx,
+		nil,
+		vndPath+"a",
+		baseImgMountPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to mount openbsd base vnd '%s' to '%s' - %w",
+			vndPath, baseImgMountPath, err)
+	}
+
+	return tmpImgPath, baseImgMountPath, unmountFn, nil
+}
+
+func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
 	finalOutputDirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
 
-	isoPath := filepath.Join(finalOutputDirPath, config.isoName())
+	installerPath := filepath.Join(finalOutputDirPath, config.installerFileName())
 	sha256SigPath := filepath.Join(finalOutputDirPath, config.sha256SigName())
 
 	verifyConfig := signifyVerifyConfig{
 		PubKeyPath:       "/etc/signify/openbsd-" + config.releaseID() + "-base.pub",
 		DotSigPath:       sha256SigPath,
-		FileNameToVerify: config.isoName(),
+		FileNameToVerify: config.installerFileName(),
 	}
 
 	err := signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
 	if err == nil {
-		return isoPath, nil
+		return installerPath, nil
 	}
 
 	if errors.Is(err, context.Canceled) {
@@ -444,21 +527,21 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 	// but that causes the file renames to fail because /tmp
 	// is on a different partition. As a result, the rename
 	// calls fail with: "cross-device link".
-	tmpDirPath, err := os.MkdirTemp(o.dlcDirPath, ".mkobsd-iso-download-")
+	tmpDirPath, err := os.MkdirTemp(o.dlcDirPath, ".mkobsd-download-")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp iso download dir - %w", err)
+		return "", fmt.Errorf("failed to create temp download dir - %w", err)
 	}
-	if !o.DebugISOVerify && tmpDirPath != "/" {
+	if !o.DebugVerify && tmpDirPath != "/" {
 		defer os.RemoveAll(tmpDirPath)
 	}
 
 	err = os.Chown(tmpDirPath, int(o.buildUserInfo.UID), int(o.buildUserInfo.GID))
 	if err != nil {
-		return "", fmt.Errorf("failed to chown temp iso download dir - %w", err)
+		return "", fmt.Errorf("failed to chown temp download dir - %w", err)
 	}
 
 	sigTmpPath := filepath.Join(tmpDirPath, filepath.Base(sha256SigPath))
-	isoTmpPath := filepath.Join(tmpDirPath, filepath.Base(isoPath))
+	installerTmpPath := filepath.Join(tmpDirPath, filepath.Base(installerPath))
 	verifyTmpConfig := verifyConfig
 	verifyTmpConfig.DotSigPath = sigTmpPath
 
@@ -468,10 +551,10 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 			config.sha256SigUrl(), sigTmpPath, err)
 	}
 
-	err = execFTPAs(ctx, o.buildUserInfo, config.isoUrl(), isoTmpPath)
+	err = execFTPAs(ctx, o.buildUserInfo, config.installerURL(), installerTmpPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to http get openbsd iso '%s' into '%s' - %w",
-			config.isoUrl(), isoTmpPath, err)
+		return "", fmt.Errorf("failed to http get openbsd installer '%s' into '%s' - %w",
+			config.installerURL(), installerTmpPath, err)
 	}
 
 	err = signifyVerifyAs(ctx, o.buildUserInfo, verifyTmpConfig)
@@ -484,24 +567,24 @@ func (o *BuildCache) openbsdISO(ctx context.Context, config openbsdSrcFilesConfi
 		return "", fmt.Errorf("failed to chown tmp sig file to root:wheel - %w", err)
 	}
 
-	err = os.Chown(isoTmpPath, 0, 0)
+	err = os.Chown(installerTmpPath, 0, 0)
 	if err != nil {
-		return "", fmt.Errorf("failed to chown tmp iso file to root:wheel - %w", err)
+		return "", fmt.Errorf("failed to chown tmp installer file to root:wheel - %w", err)
 	}
 
 	err = os.Rename(sigTmpPath, sha256SigPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to rename '%s' to '%s' - %w",
+		return "", fmt.Errorf("failed to rename sha256 file '%s' to '%s' - %w",
 			sigTmpPath, sha256SigPath, err)
 	}
 
-	err = os.Rename(isoTmpPath, isoPath)
+	err = os.Rename(installerTmpPath, installerPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to rename '%s' to '%s' - %w",
-			isoTmpPath, isoPath, err)
+		return "", fmt.Errorf("failed to rename installer file '%s' to '%s' - %w",
+			installerTmpPath, installerPath, err)
 	}
 
-	return isoPath, nil
+	return installerPath, nil
 }
 
 func execFTPAs(ctx context.Context, u *userInfo, urlStr string, outputPath string) error {
@@ -535,15 +618,15 @@ func execFTPAs(ctx context.Context, u *userInfo, urlStr string, outputPath strin
 }
 
 type copyInstallAutomationConfig struct {
-	ISOConfig  *BuildISOConfig
-	ISODirPath string
-	RDDirPath  string
+	BuildConfig      *BuildConfig
+	InstallerDirPath string
+	RDDirPath        string
 }
 
 func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInstallAutomationConfig) error {
-	if config.ISOConfig.OptAutoinstallFilePath != "" {
+	if config.BuildConfig.OptAutoinstallFilePath != "" {
 		err := copyFilePathToWithMode(
-			config.ISOConfig.OptAutoinstallFilePath,
+			config.BuildConfig.OptAutoinstallFilePath,
 			filepath.Join(config.RDDirPath, "auto_install.conf"),
 			0600)
 		if err != nil {
@@ -551,17 +634,17 @@ func (o *BuildCache) copyInstallAutomation(ctx context.Context, config copyInsta
 		}
 	}
 
-	if config.ISOConfig.OptInstallsiteDirPath != "" {
+	if config.BuildConfig.OptInstallsiteDirPath != "" {
 		siteParentDirPath := filepath.Join(
-			config.ISODirPath,
-			config.ISOConfig.Release,
-			config.ISOConfig.Arch)
+			config.InstallerDirPath,
+			config.BuildConfig.Release,
+			config.BuildConfig.Arch)
 
 		err := createInstallsiteTar(ctx, createInstallsiteTarConfig{
-			SiteDirPath: config.ISOConfig.OptInstallsiteDirPath,
+			SiteDirPath: config.BuildConfig.OptInstallsiteDirPath,
 			OutDirPath:  siteParentDirPath,
-			Release:     config.ISOConfig.Release,
-			PreserveIDs: config.ISOConfig.PreserveSiteTarIDs,
+			Release:     config.BuildConfig.Release,
+			PreserveIDs: config.BuildConfig.PreserveSiteTarIDs,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create install.site tar - %w", err)
@@ -575,14 +658,15 @@ type openbsdSrcFilesConfig struct {
 	Mirror  string
 	Release string
 	Arch    string
+	FileExt string
 }
 
-func (o openbsdSrcFilesConfig) isoUrl() string {
-	return o.Mirror + "/" + o.Release + "/" + o.Arch + "/" + o.isoName()
+func (o openbsdSrcFilesConfig) installerURL() string {
+	return o.Mirror + "/" + o.Release + "/" + o.Arch + "/" + o.installerFileName()
 }
 
-func (o openbsdSrcFilesConfig) isoName() string {
-	return "install" + strings.ReplaceAll(o.Release, ".", "") + ".iso"
+func (o openbsdSrcFilesConfig) installerFileName() string {
+	return "install" + strings.ReplaceAll(o.Release, ".", "") + "." + o.FileExt
 }
 
 func (o openbsdSrcFilesConfig) sha256SigUrl() string {
