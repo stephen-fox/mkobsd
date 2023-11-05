@@ -1,4 +1,4 @@
-// mkobsd automates the creation of OpenBSD installer ISO images.
+// mkobsd automates the creation of OpenBSD installer images.
 package main
 
 import (
@@ -25,11 +25,11 @@ SYNOPSIS
   ` + appName + ` [options] -` + releaseArg + ` <release> -` + cpuArchArg + ` <arch> -` + isoOutputPathArg + ` </path/to/new.iso>
 
 DESCRIPTION
-  ` + appName + ` automates the creation of OpenBSD installer ISO images.
+  ` + appName + ` automates the creation of OpenBSD installer images.
 
   It was designed to create unattended installer images by including
   an autoinstall file and/or an install.site script and tar set in
-  the ISO file itself.
+  the installer itself.
 
 EXAMPLES
   For examples, please execute: ` + appName + ` -` + advHelpArg + `
