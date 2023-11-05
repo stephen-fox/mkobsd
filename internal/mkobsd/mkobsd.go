@@ -524,7 +524,7 @@ func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsd
 	}
 
 	if errors.Is(err, context.Canceled) {
-		return "", ctx.Err()
+		return "", err
 	}
 
 	err = os.MkdirAll(finalOutputDirPath, 0755)
