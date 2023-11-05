@@ -1,24 +1,24 @@
 # mkobsd
 
-mkobsd automates the creation of OpenBSD installer ISO images.
+mkobsd automates the creation of OpenBSD installer images.
 
 It was designed to create unattended installer images by including
 an autoinstall file and/or an install.site script and tar set in
-the ISO file itself.
+the ISO or img file itself.
 
 ## Features
 
 - Automates the creation of unattended OpenBSD installer images
   (note: interactive installations are also supported)
-- Automatic downloading and verification of original OpenBSD ISO images.
-  Original ISOs are cached in a configurable directory to improve build
+- Automatic downloading and verification of original OpenBSD installers.
+  Original files are cached in a configurable directory to improve build
   times and are re-verified on each build
-- Downloading and verification of the original OpenBSD ISO are carried
+- Downloading and verification of the original OpenBSD installers are carried
   out by `ftp(1)` and `signify(1)` as a non-root user. Both applications
   implement `pledge(2)`, adding a meaningful security barrier between
   mkobsd and unverified data
 - Optionally specify an [autoinstall(8)][autoinstall] configuration file
-  to be included in the new ISO
+  to be included in the new installer
 - Optionally specify an [install.site(5)][install.site] script and
   a directory containing files that will be dropped in `/` at install-time
   (note: by default, file ownership is not preserved and `root:wheel`
