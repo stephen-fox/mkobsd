@@ -2,7 +2,22 @@
 
 The files in this directory demonstrate how to create an OpenBSD installer
 img that installs the OS without any user input in a secure manner.
-This example is specifically meant to be a FreeBSD bhyve UEFI guest.
+This example is specifically meant to be a FreeBSD bhyve UEFI guest
+that loads a img-type installer as a second virtio-blk device.
+Here is the [vm-bhyve configuration](https://github.com/churchers/vm-bhyve):
+
+```
+loader="uefi"
+cpu=1
+memory=256M
+network0_type="virtio-net"
+network0_switch="your_network"
+disk0_type="virtio-blk"
+disk0_name="disk0.img"
+disk1_type="virtio-blk"
+disk1_name="example-7.3-amd64.img"
+bhyve_options="-w"
+```
 
 To try this example, do the following:
 
