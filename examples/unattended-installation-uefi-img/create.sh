@@ -8,8 +8,8 @@ arch=amd64
 version=7.3
 
 doas mkobsd \
-  -o "${dir_path}/example-${version}-${arch}.iso" \
-  -t "iso" \
+  -o "${dir_path}/example-${version}-${arch}.img" \
+  -t "img" \
   -a ${arch} \
   -r ${version} \
   -i "${dir_path}/auto_install.conf" \
