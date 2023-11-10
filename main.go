@@ -22,10 +22,11 @@ const (
 	usage   = appName + `
 
 SYNOPSIS
-  ` + appName + ` [options] -` + releaseArg + ` <release> -` + cpuArchArg + ` <arch> -` + isoOutputPathArg + ` </path/to/new.iso>
+  ` + appName + ` [options] -` + releaseArg + ` <release> -` + cpuArchArg + ` <arch> -` + installerTypeArg + ` <iso|img> -` + installerOutputPathArg + ` <new-installer>
 
 DESCRIPTION
   ` + appName + ` automates the creation of OpenBSD installer images.
+  It supports both the .img and .iso installer types.
 
   It was designed to create unattended installer images by including
   an autoinstall file and/or an install.site script and tar set in
@@ -42,20 +43,20 @@ OPTIONS
 
 	advHelpDoc = appName + "\n\n" + advhelp.Usage
 
-	helpArg               = "h"
-	advHelpArg            = "H"
-	isoOutputPathArg      = "o"
-	baseDirPathArg        = "B"
-	releaseArg            = "r"
-	cpuArchArg            = "a"
-	isoMirrorArg          = "m"
-	installerTypeArg      = "t"
-	autoinstallArg        = "i"
-	installsiteDirArg     = "d"
-	preserveSiteTarIDsArg = "P"
-	logTimestampsArg      = "T"
-	debugArg              = "D"
-	debugVerifyISOArg     = "K"
+	helpArg                = "h"
+	advHelpArg             = "H"
+	installerOutputPathArg = "o"
+	baseDirPathArg         = "B"
+	releaseArg             = "r"
+	cpuArchArg             = "a"
+	installerMirrorArg     = "m"
+	installerTypeArg       = "t"
+	autoinstallArg         = "i"
+	installsiteDirArg      = "d"
+	preserveSiteTarIDsArg  = "P"
+	logTimestampsArg       = "T"
+	debugArg               = "D"
+	debugVerifyArg         = "K"
 
 	debugEnvName = "MKOBSD_DEBUG"
 
@@ -85,9 +86,9 @@ func mainWithError(osArgs []string) error {
 		"Display advanced usage information and examples")
 
 	installerOutputPath := flagSet.String(
-		isoOutputPathArg,
+		installerOutputPathArg,
 		"",
-		"The file path to save the resulting .iso file to")
+		"The file path to save the resulting installer file to")
 
 	baseDirPath := flagSet.String(
 		baseDirPathArg,
@@ -104,8 +105,8 @@ func mainWithError(osArgs []string) error {
 		"",
 		"Target CPU architecture (e.g., 'amd64')")
 
-	isoMirror := flagSet.String(
-		isoMirrorArg,
+	installerMirror := flagSet.String(
+		installerMirrorArg,
 		"https://cdn.openbsd.org/pub/OpenBSD",
 		"OpenBSD mirror URL")
 
@@ -118,13 +119,13 @@ func mainWithError(osArgs []string) error {
 		autoinstallArg,
 		"",
 		"Optionally provide the path to an autoinstall(8) configuration file\n"+
-			"to include in the ISO")
+			"to include in the installer")
 
 	installsiteDirPath := flagSet.String(
 		installsiteDirArg,
 		"",
 		"Optionally specify an install.site(5) directory to be included in the\n"+
-			"resulting ISO file. The directory's contents will be placed in a tar\n"+
+			"resulting installer. The directory's contents will be placed in a tar\n"+
 			"archive and extracted to '/' at install time. If an executable file\n"+
 			"named 'install.site' exists at the root of the directory, it will be\n"+
 			"executed by the installer")
@@ -146,10 +147,10 @@ func mainWithError(osArgs []string) error {
 		"Enable debug mode. This allows the user to step through each\nstage of the build workflow. May also be enabled by setting\n"+
 			"the '"+debugEnvName+"' environment variable to 'true'")
 
-	debugVerifyISO := flagSet.Bool(
-		debugVerifyISOArg,
+	debugVerify := flagSet.Bool(
+		debugVerifyArg,
 		false,
-		"Do not delete original OpenBSD .iso if verification fails")
+		"Do not delete original OpenBSD installer if verification fails")
 
 	flagSet.Parse(osArgs[1:])
 
@@ -200,7 +201,7 @@ func mainWithError(osArgs []string) error {
 
 	cache := &mkobsd.BuildCache{
 		BasePath:    *baseDirPath,
-		DebugVerify: *debugVerifyISO,
+		DebugVerify: *debugVerify,
 	}
 
 	ctx, cancelFn := signal.NotifyContext(context.Background(),
@@ -242,7 +243,7 @@ func mainWithError(osArgs []string) error {
 
 	err = cache.Build(ctx, &mkobsd.BuildConfig{
 		InstallerOutputPath:    *installerOutputPath,
-		Mirror:                 *isoMirror,
+		Mirror:                 *installerMirror,
 		Release:                *release,
 		Arch:                   *cpuArch,
 		InstallerType:          *installerType,
@@ -253,7 +254,7 @@ func mainWithError(osArgs []string) error {
 		OptAfterActionFn:       afterFn,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to build iso - %w", err)
+		return fmt.Errorf("failed to build installer - %w", err)
 	}
 
 	return nil
