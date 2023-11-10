@@ -1,10 +1,11 @@
 # mkobsd
 
 mkobsd automates the creation of OpenBSD installer images.
+It supports both the .img and .iso installer types.
 
 It was designed to create unattended installer images by including
 an autoinstall file and/or an install.site script and tar set in
-the ISO or img file itself.
+the installer itself.
 
 ## Features
 
