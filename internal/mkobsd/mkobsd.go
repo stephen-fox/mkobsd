@@ -508,28 +508,19 @@ func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsd
 		FileNameToVerify: config.installerFileName(),
 	}
 
-	// Perform this check here becasue we ignore will end up
-	// ignoring the error and wasting time on an installer
-	// download that will inevitably fail verification.
-	_, err := os.Stat(verifyConfig.PubKeyPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to stat openbsd installer signer public key file "+
-			"(note: if you are building an installer for a newer version of openbsd,"+
-			"you may need to copy this file from the openbsd source code) - %w", err)
-	}
+	installerAlreadyExists, _, _ := pathExists(installerPath)
+	if installerAlreadyExists {
+		err := signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
+		if err != nil {
+			return "", fmt.Errorf("failed to signify verify existing installer - %w", err)
+		}
 
-	err = signifyVerifyAs(ctx, o.buildUserInfo, verifyConfig)
-	if err == nil {
 		return installerPath, nil
 	}
 
-	if errors.Is(err, context.Canceled) {
-		return "", err
-	}
-
-	err = os.MkdirAll(finalOutputDirPath, 0755)
+	err := os.MkdirAll(finalOutputDirPath, 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create dlc release path '%s' - %w",
+		return "", fmt.Errorf("failed to create original installer output dir '%s' - %w",
 			finalOutputDirPath, err)
 	}
 
@@ -569,7 +560,7 @@ func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsd
 
 	err = signifyVerifyAs(ctx, o.buildUserInfo, verifyTmpConfig)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to signify verify newly-downloaded installer - %w", err)
 	}
 
 	err = os.Chown(sigTmpPath, 0, 0)
@@ -702,6 +693,13 @@ type signifyVerifyConfig struct {
 }
 
 func signifyVerifyAs(ctx context.Context, u *userInfo, config signifyVerifyConfig) error {
+	_, err := os.Stat(config.PubKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat openbsd installer signer public key file "+
+			"(note: if you are building an installer for a newer version of openbsd, "+
+			"you may need to copy this file from the openbsd source code) - %w", err)
+	}
+
 	signify := exec.CommandContext(ctx, "/usr/bin/signify",
 		"-C",
 		"-p", config.PubKeyPath,
