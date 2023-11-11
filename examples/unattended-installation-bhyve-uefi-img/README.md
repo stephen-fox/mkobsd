@@ -1,4 +1,4 @@
-# Unattended installation example
+# Unattended installation bhyve UEFI img example
 
 The files in this directory demonstrate how to create an OpenBSD installer
 img that installs the OS without any user input in a secure manner.
