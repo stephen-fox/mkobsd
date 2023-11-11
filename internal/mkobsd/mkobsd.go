@@ -98,7 +98,7 @@ type userInfo struct {
 
 const (
 	setupAction                 = "setup"
-	setupOpenBSDInstallerTree   = "setup-obsd-installer-tree"
+	setupOpenBSDInstallerTree   = "setup-new-installer-tree"
 	mapKernelRAMDiskAction      = "map-kernel-ram-disk"
 	copyInstallAutomationAction = "copy-install-automation"
 	unmapKernelRAMDiskAction    = "unmap-kernel-ram-disk"
