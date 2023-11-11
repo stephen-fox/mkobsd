@@ -32,4 +32,4 @@ and points it at [`auto_install.conf`](auto_install.conf) and the
 [`generic directory`](generic).
 
 For a detailed description of the files in this directory, please refer
-to the other [unattended-installation](../unattended-installation) example.
+to the [unattended-installation-iso](../unattended-installation-iso) example.
