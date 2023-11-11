@@ -161,7 +161,7 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 		FileExt: config.InstallerType,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to find or download openbsd installer - %w", err)
+		return fmt.Errorf("failed to find or download original openbsd installer - %w", err)
 	}
 
 	switch config.InstallerType {
@@ -519,6 +519,7 @@ func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsd
 	finalOutputDirPath := filepath.Join(o.dlcDirPath, config.Arch, config.Release)
 
 	installerPath := filepath.Join(finalOutputDirPath, config.installerFileName())
+
 	sha256SigPath := filepath.Join(finalOutputDirPath, config.sha256SigName())
 
 	verifyConfig := signifyVerifyConfig{
