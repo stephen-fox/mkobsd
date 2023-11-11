@@ -151,7 +151,7 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 	}
 
 	var installerDirPath string
-	var earlyUnmountFn func(context.Context) error
+	var onImgDoneFn func(context.Context) error
 	var optImgPath string
 
 	originalInstallerPath, err := o.findOrDownloadInstaller(ctx, openbsdSrcFilesConfig{
@@ -172,14 +172,14 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 		}
 		defer os.RemoveAll(installerDirPath)
 	case "img":
-		optImgPath, installerDirPath, earlyUnmountFn, err = o.copyAndMountOpenbsdImg(
+		optImgPath, installerDirPath, onImgDoneFn, err = o.copyAndMountOpenbsdImg(
 			ctx,
 			originalInstallerPath,
 			buildDirPath)
 		if err != nil {
 			return fmt.Errorf("failed to create new openbsd img - %w", err)
 		}
-		defer earlyUnmountFn(context.Background())
+		defer onImgDoneFn(context.Background())
 	default:
 		return fmt.Errorf("unsupported installer type: %q", config.InstallerType)
 	}
@@ -262,7 +262,7 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 	}
 
 	if config.InstallerType == "img" {
-		err = earlyUnmountFn(context.Background())
+		err = onImgDoneFn(context.Background())
 		if err != nil {
 			return fmt.Errorf("failed to unmount new img - %w", err)
 		}
@@ -411,12 +411,12 @@ func (o *BuildCache) extractOpenbsdISO(ctx context.Context, isoPath string, buil
 	}
 	defer os.Remove(baseISOMountPath)
 
-	vndID, unconfigFn, err := allocateVNDForFile(ctx, isoPath)
+	vndID, unconfigVndFn, err := allocateVNDForFile(ctx, isoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to allocate vnd for '%s' - %w",
 			isoPath, err)
 	}
-	defer unconfigFn(context.Background())
+	defer unconfigVndFn(context.Background())
 
 	vndPath := "/dev/" + vndID
 
@@ -474,12 +474,11 @@ func (o *BuildCache) copyAndMountOpenbsdImg(ctx context.Context, imgPath string,
 		return "", "", nil, fmt.Errorf("failed to copy openbsd img to tmp - %w", err)
 	}
 
-	vndID, unconfigFn, err := allocateVNDForFile(ctx, tmpImgPath)
+	vndID, unconfigVndFn, err := allocateVNDForFile(ctx, tmpImgPath)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("failed to allocate vnd for tmp img '%s' - %w",
 			tmpImgPath, err)
 	}
-	defer unconfigFn(context.Background())
 
 	vndPath := "/dev/" + vndID
 
@@ -489,11 +488,31 @@ func (o *BuildCache) copyAndMountOpenbsdImg(ctx context.Context, imgPath string,
 		vndPath+"a",
 		baseImgMountPath)
 	if err != nil {
+		vndErr := unconfigVndFn(context.Background())
+		if vndErr != nil {
+			return "", "", nil, fmt.Errorf("failed to unconfigure vnd after mount failure - vnconfig error: %s | mount error: %w", vndErr, err)
+		}
+
 		return "", "", nil, fmt.Errorf("failed to mount openbsd base vnd '%s' to '%s' - %w",
 			vndPath, baseImgMountPath, err)
 	}
 
-	return tmpImgPath, baseImgMountPath, unmountFn, nil
+	onDoneFn := func(ctx context.Context) error {
+		err := unmountFn(ctx)
+		if err != nil {
+			_ = unconfigVndFn(ctx)
+			return fmt.Errorf("unmount failed - %w", err)
+		}
+
+		err = unconfigVndFn(ctx)
+		if err != nil {
+			return fmt.Errorf("vnd unconfigure failed - %w", err)
+		}
+
+		return nil
+	}
+
+	return tmpImgPath, baseImgMountPath, onDoneFn, nil
 }
 
 func (o *BuildCache) findOrDownloadInstaller(ctx context.Context, config openbsdSrcFilesConfig) (string, error) {
