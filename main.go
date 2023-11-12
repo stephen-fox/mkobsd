@@ -272,8 +272,23 @@ func readNewlineCtx(ctx context.Context) error {
 	newline := make(chan error, 1)
 
 	go func() {
-		_, err := fmt.Scanln()
-		newline <- err
+		// Use os.Stdin.Read instead of
+		// fmt.Scanln because Scanln
+		// returns an error if the
+		// byte is not a newline.
+		for {
+			b := make([]byte, 1)
+			_, err := os.Stdin.Read(b)
+			if err != nil {
+				newline <- err
+				return
+			}
+
+			if b[0] == '\n' {
+				newline <- nil
+				return
+			}
+		}
 	}()
 
 	select {
