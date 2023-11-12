@@ -7,6 +7,8 @@ that loads a img-type installer as a second virtio-blk device.
 Here is the [vm-bhyve configuration](https://github.com/churchers/vm-bhyve):
 
 ```
+# openbsd-uefi.conf
+# vm-bhyve template file.
 loader="uefi"
 cpu=1
 memory=256M
@@ -14,8 +16,6 @@ network0_type="virtio-net"
 network0_switch="your_network"
 disk0_type="virtio-blk"
 disk0_name="disk0.img"
-disk1_type="virtio-blk"
-disk1_name="example-7.3-amd64.img"
 bhyve_options="-w"
 ```
 
@@ -24,6 +24,17 @@ To try this example, do the following:
 1. Replace the placeholder SSH public key (the `BUH` string) with your own in
    [generic/install.site](generic/install.site)
 2. Execute [create.sh](create.sh)
+3. Save the contents of the above snippet in a vm-bhyve template file named
+   "openbsd-uefi.conf"
+4. Execute `vm create -t openbsd-uefi example`
+5. Execute `vm install example example.img`
+6. Make sure to restart the VM after it finishes installing the OS.
+   This sucks, but there does not appear to be a good way to make
+   vm-bhyve "eject" the img installer disk. Stopping the VM process
+   with `vm poweroff example` will eject the installer. The install
+   automation in this example halts the VM when the installer finishes.
+   Without this automation, the VM will reboot back into the installer
+   in an endless loop
 
 ## How it works
 

@@ -36,4 +36,9 @@ add_admin me 'BUH'
 
 # Remove the install.site script so it does not get left behind on
 # the file system.
-rm ${0}
+/bin/rm ${0}
+
+# The autoinstall(8) "halt" does not appear to work.
+# This works around it.
+/bin/sync
+/sbin/shutdown -p now
