@@ -402,8 +402,16 @@ func (o *BuildConfig) validate() error {
 		return errors.New("release version is empty")
 	}
 
+	if strings.Contains(o.Release, "/") {
+		return errors.New("release version contains a '/'")
+	}
+
 	if o.Arch == "" {
 		return errors.New("cpu architecture is empty")
+	}
+
+	if strings.Contains(o.Arch, "/") {
+		return errors.New("cpu architecture contains a '/'")
 	}
 
 	if o.OptAutoinstallFilePath != "" {
