@@ -162,7 +162,8 @@ func mainWithError(osArgs []string) error {
 	debug := flagSet.Bool(
 		debugArg,
 		false,
-		"Enable debug mode. This allows the user to step through each\nstage of the build workflow. May also be enabled by setting\n"+
+		"Enable debug mode. This allows the user to step through each\n"+
+			"stage of the build workflow. May also be enabled by setting\n"+
 			"the '"+debugEnvName+"' environment variable to 'true'")
 
 	debugVerify := flagSet.Bool(
