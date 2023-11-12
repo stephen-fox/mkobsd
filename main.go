@@ -214,19 +214,27 @@ func mainWithError(osArgs []string) error {
 	if *debug {
 		beforeFn = func(s string, info map[string]string) error {
 			log.Printf("[%s] start - info: %+v - press enter to continue", s, info)
+
 			err := readNewlineCtx(ctx)
 			if err != nil {
 				return err
 			}
+
+			log.Println("continuing...")
+
 			return nil
 		}
 
 		afterFn = func(s string, info map[string]string) error {
 			log.Printf("[%s] finished - info: %+v - press enter to continue", s, info)
+
 			err := readNewlineCtx(ctx)
 			if err != nil {
 				return err
 			}
+
+			log.Println("continuing...")
+
 			return nil
 		}
 	} else {
