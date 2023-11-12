@@ -407,55 +407,87 @@ func (o *BuildConfig) validate() error {
 	}
 
 	if o.OptAutoinstallFilePath != "" {
-		if !filepath.IsAbs(o.OptAutoinstallFilePath) {
-			return errors.New("auto_install config file path must be absolute")
-		}
-
-		_, err := os.Stat(o.OptAutoinstallFilePath)
+		_, err := checkImportantPath(o.OptAutoinstallFilePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("autoinstall check failed - %w", err)
 		}
 	}
 
 	if o.OptInstallsiteDirPath != "" {
-		if !filepath.IsAbs(o.OptInstallsiteDirPath) {
-			return errors.New("install.site directory path must be absolute")
-		}
-
-		info, err := os.Stat(o.OptInstallsiteDirPath)
+		err := checkImportantDir(o.OptInstallsiteDirPath)
 		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() {
-			return fmt.Errorf("install.site dir path is not a directory ('%s')",
-				o.OptInstallsiteDirPath)
+			return fmt.Errorf("install.site dir check failed - %w", err)
 		}
 	}
 
 	if o.OptCustomizeInstallerExe != "" {
-		if !filepath.IsAbs(o.OptCustomizeInstallerExe) {
-			return errors.New("installer exe chroot path must be absolute")
-		}
-
-		_, err := os.Stat(o.OptCustomizeInstallerExe)
+		err := checkImportantExe(o.OptCustomizeInstallerExe)
 		if err != nil {
-			return err
+			return fmt.Errorf("installer customization exe check failed - %w", err)
 		}
 	}
 
 	if o.OptCustomizeKernelRDExe != "" {
-		if !filepath.IsAbs(o.OptCustomizeKernelRDExe) {
-			return errors.New("kernel ramdisk exe chroot path must be absolute")
-		}
-
-		_, err := os.Stat(o.OptCustomizeKernelRDExe)
+		err := checkImportantExe(o.OptCustomizeInstallerExe)
 		if err != nil {
-			return err
+			return fmt.Errorf("kernel ram disk customization exe check failed - %w", err)
 		}
 	}
 
 	return nil
+}
+
+func checkImportantExe(filePath string) error {
+	info, err := checkImportantPath(filePath)
+	if err != nil {
+		return err
+	}
+
+	// From "man 2 chmod":
+	//
+	// #define S_IXUSR 0000100    /* X for owner */
+	//
+	// #define S_IXGRP 0000010    /* X for group */
+	//
+	// #define S_IXOTH 0000001    /* X for other */
+	if info.Mode()&0000111 == 0 {
+		return fmt.Errorf("%q is not marked as executable", filePath)
+	}
+
+	return nil
+}
+
+func checkImportantDir(dirPath string) error {
+	info, err := checkImportantPath(dirPath)
+	if err != nil {
+		return err
+	}
+
+	if !info.IsDir() {
+		return errors.New("path is not a directory")
+	}
+
+	return nil
+}
+
+func checkImportantPath(fileOrDirPath string) (os.FileInfo, error) {
+	if !filepath.IsAbs(fileOrDirPath) {
+		return nil, fmt.Errorf("%q path must be absolute", fileOrDirPath)
+	}
+
+	info, err := os.Stat(fileOrDirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// From "man 2 chmod":
+	//
+	// #define S_IWOTH 0000002    /* W for other */
+	if info.Mode()&0000002 > 0 {
+		return nil, fmt.Errorf("%q is writable by other users", fileOrDirPath)
+	}
+
+	return info, nil
 }
 
 func (o *BuildCache) extractOpenbsdISO(ctx context.Context, isoPath string, buildDirPath string) (string, error) {
