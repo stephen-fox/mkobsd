@@ -3,10 +3,12 @@
 The files in this directory demonstrate how to create an OpenBSD installer
 img that installs the OS without any user input in a secure manner.
 This example is specifically meant to be a FreeBSD bhyve UEFI guest
-that loads a img-type installer. In addition to using an autoinstall
-and install.site automation, it customizes the installer at build time
-to use `com0` as the tty. Without this customization, the installer and
-newly-installed OS will not write the bhyve serial console.
+that loads a img-type installer.
+
+In addition to using autoinstall and install.site automation, it
+configures the installer to use `com0` as the tty at build time.
+Without this customization, the installer and newly-installed OS
+will not write the bhyve serial console.
 
 This example halts the VM's CPU when the installer finishes. It does this
 to work around vm-bhyve not "ejecting" the installer.
