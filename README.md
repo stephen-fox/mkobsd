@@ -27,7 +27,10 @@ the installer itself.
 - Optionally customize both the new installer and its kernel RAM disk
   at build time. Two different executables can be specified as command
   line arguments: one for the installer customization, and the other
-  for kernel RAM disk customization
+  for kernel RAM disk customization. When a customization executable
+  is run, an environment variable named `MKOBSD_WORK_DIR` will be set.
+  The customization program can find the new installer or kernel RAM
+  disk directory by checking the value of this variable
 
 [autoinstall]: https://man.openbsd.org/autoinstall.8
 [install.site]: https://man.openbsd.org/install.site.5
