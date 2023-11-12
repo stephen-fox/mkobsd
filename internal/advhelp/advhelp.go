@@ -29,6 +29,7 @@ const Usage = `EXAMPLES
     version=7.3
 
     doas mkobsd \
+      -t "iso" \
       -o "${dir_path}/example-${version}-${arch}.iso" \
       -a ${arch} \
       -r ${version} \
