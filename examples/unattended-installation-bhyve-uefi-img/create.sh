@@ -13,4 +13,5 @@ doas mkobsd \
   -a ${arch} \
   -r ${version} \
   -i "${dir_path}/auto_install.conf" \
-  -d "${dir_path}/generic"
+  -d "${dir_path}/generic" \
+  -x "${dir_path}/customize-installer.sh"
