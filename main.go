@@ -113,7 +113,7 @@ func mainWithError(osArgs []string) error {
 	installerType := flagSet.String(
 		installerTypeArg,
 		"",
-		"The installer image type (only 'iso' and 'img' are supported)\n")
+		"The installer image type (only 'iso' and 'img' are supported)")
 
 	autoinstallFilePath := flagSet.String(
 		autoinstallArg,
