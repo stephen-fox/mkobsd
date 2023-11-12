@@ -13,6 +13,10 @@ import (
 	"sync"
 )
 
+const (
+	CustomizeExeWorkDirEnv = "MKOBSD_WORK_DIR"
+)
+
 type BuildCache struct {
 	BasePath      string
 	DebugVerify   bool
@@ -95,6 +99,8 @@ const (
 	setupOpenBSDInstallerTree   = "setup-new-installer-tree"
 	mapKernelRAMDiskAction      = "map-kernel-ram-disk"
 	copyInstallAutomationAction = "copy-install-automation"
+	customizeInstallerAction    = "customize-installer"
+	customizeKernelRDAction     = "customize-kernel-ram-disk"
 	unmapKernelRAMDiskAction    = "unmap-kernel-ram-disk"
 	makeNewISOAction            = "make-new-iso"
 )
@@ -236,6 +242,52 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 		}
 	}
 
+	if config.OptCustomizeInstallerExe != "" {
+		if config.OptBeforeActionFn != nil {
+			err := config.OptBeforeActionFn(customizeInstallerAction, map[string]string{
+				"exe-path": config.OptCustomizeInstallerExe,
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		err := executeCustomizeExe(ctx, config.OptCustomizeInstallerExe, installerDirPath)
+		if err != nil {
+			return fmt.Errorf("failed to execute installer customizer exe - %w", err)
+		}
+
+		if config.OptAfterActionFn != nil {
+			err := config.OptAfterActionFn(customizeInstallerAction, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if config.OptCustomizeKernelRDExe != "" {
+		if config.OptBeforeActionFn != nil {
+			err := config.OptBeforeActionFn(customizeKernelRDAction, map[string]string{
+				"exe-path": config.OptCustomizeKernelRDExe,
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		err := executeCustomizeExe(ctx, config.OptCustomizeKernelRDExe, rdMountDirPath)
+		if err != nil {
+			return fmt.Errorf("failed to execute kernel ram disk customizer exe - %w", err)
+		}
+
+		if config.OptAfterActionFn != nil {
+			err := config.OptAfterActionFn(customizeKernelRDAction, nil)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if config.OptBeforeActionFn != nil {
 		err := config.OptBeforeActionFn(unmapKernelRAMDiskAction, nil)
 		if err != nil {
@@ -311,16 +363,18 @@ func (o *BuildCache) Build(ctx context.Context, config *BuildConfig) error {
 }
 
 type BuildConfig struct {
-	InstallerOutputPath    string
-	Mirror                 string
-	Release                string
-	Arch                   string
-	InstallerType          string
-	OptAutoinstallFilePath string
-	OptInstallsiteDirPath  string
-	PreserveSiteTarIDs     bool
-	OptBeforeActionFn      func(string, map[string]string) error
-	OptAfterActionFn       func(string, map[string]string) error
+	InstallerOutputPath      string
+	Mirror                   string
+	Release                  string
+	Arch                     string
+	InstallerType            string
+	OptAutoinstallFilePath   string
+	OptInstallsiteDirPath    string
+	PreserveSiteTarIDs       bool
+	OptCustomizeInstallerExe string
+	OptCustomizeKernelRDExe  string
+	OptBeforeActionFn        func(string, map[string]string) error
+	OptAfterActionFn         func(string, map[string]string) error
 }
 
 func (o *BuildConfig) validate() error {
@@ -376,6 +430,28 @@ func (o *BuildConfig) validate() error {
 		if !info.IsDir() {
 			return fmt.Errorf("install.site dir path is not a directory ('%s')",
 				o.OptInstallsiteDirPath)
+		}
+	}
+
+	if o.OptCustomizeInstallerExe != "" {
+		if !filepath.IsAbs(o.OptCustomizeInstallerExe) {
+			return errors.New("installer exe chroot path must be absolute")
+		}
+
+		_, err := os.Stat(o.OptCustomizeInstallerExe)
+		if err != nil {
+			return err
+		}
+	}
+
+	if o.OptCustomizeKernelRDExe != "" {
+		if !filepath.IsAbs(o.OptCustomizeKernelRDExe) {
+			return errors.New("kernel ramdisk exe chroot path must be absolute")
+		}
+
+		_, err := os.Stat(o.OptCustomizeKernelRDExe)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -679,6 +755,28 @@ func createInstallsiteTar(ctx context.Context, config createInstallsiteTarConfig
 	err = tarGzDir(ctx, config.SiteDirPath, f, config.PreserveIDs)
 	if err != nil {
 		return fmt.Errorf("failed to tar directory - %w", err)
+	}
+
+	return nil
+}
+
+func executeCustomizeExe(ctx context.Context, exePath string, dirPath string) error {
+	absDirPath, err := filepath.Abs(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path for directory - %w", err)
+	}
+
+	exe := exec.CommandContext(ctx, exePath)
+
+	exe.Env = os.Environ()
+	exe.Env = append(exe.Env, CustomizeExeWorkDirEnv+"="+absDirPath)
+
+	exe.Stderr = os.Stderr
+	exe.Stdout = os.Stdout
+
+	err = exe.Run()
+	if err != nil {
+		return fmt.Errorf("failed to execute '%s' - %w", exe.Path, err)
 	}
 
 	return nil

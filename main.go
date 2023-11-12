@@ -58,6 +58,9 @@ OPTIONS
 	debugArg               = "D"
 	debugVerifyArg         = "K"
 
+	customizeInstallerExePathArg = "x"
+	customizeKernelRDExePathArg  = "y"
+
 	debugEnvName = "MKOBSD_DEBUG"
 
 	defaultBaseDirPath = "/home/_" + appName
@@ -133,8 +136,23 @@ func mainWithError(osArgs []string) error {
 	preserveSiteTarIDs := flagSet.Bool(
 		preserveSiteTarIDsArg,
 		false,
-		"Preserve UID and GIDs of the install.site directory when creating a tar.\n"+
-			"If unspecified, root:wheel is used")
+		"Preserve UID and GIDs of the install.site directory when creating\n"+
+			"a tar. If unspecified, root:wheel is used")
+
+	customizeInstallerExePath := flagSet.String(
+		customizeInstallerExePathArg,
+		"",
+		"Optionally provide the path to an executable to customize the new\n"+
+			"installer. The '"+mkobsd.CustomizeExeWorkDirEnv+"' environment variable is provided\n"+
+			"to the exe to identify the new installer's directory path")
+
+	customizeKernelRDExePath := flagSet.String(
+		customizeKernelRDExePathArg,
+		"",
+		"Optionally provide the path to an executable to customize the new\n"+
+			"kernel ram disk. The '"+mkobsd.CustomizeExeWorkDirEnv+"' environment variable is\n"+
+			"provided to the exe to identify the new kernel ram disk\n"+
+			"directory path")
 
 	logTimestamps := flagSet.Bool(
 		logTimestampsArg,
@@ -250,16 +268,18 @@ func mainWithError(osArgs []string) error {
 	}
 
 	err = cache.Build(ctx, &mkobsd.BuildConfig{
-		InstallerOutputPath:    *installerOutputPath,
-		Mirror:                 *installerMirror,
-		Release:                *release,
-		Arch:                   *cpuArch,
-		InstallerType:          *installerType,
-		OptAutoinstallFilePath: *autoinstallFilePath,
-		OptInstallsiteDirPath:  *installsiteDirPath,
-		PreserveSiteTarIDs:     *preserveSiteTarIDs,
-		OptBeforeActionFn:      beforeFn,
-		OptAfterActionFn:       afterFn,
+		InstallerOutputPath:      *installerOutputPath,
+		Mirror:                   *installerMirror,
+		Release:                  *release,
+		Arch:                     *cpuArch,
+		InstallerType:            *installerType,
+		OptAutoinstallFilePath:   *autoinstallFilePath,
+		OptInstallsiteDirPath:    *installsiteDirPath,
+		PreserveSiteTarIDs:       *preserveSiteTarIDs,
+		OptCustomizeInstallerExe: *customizeInstallerExePath,
+		OptCustomizeKernelRDExe:  *customizeKernelRDExePath,
+		OptBeforeActionFn:        beforeFn,
+		OptAfterActionFn:         afterFn,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to build installer - %w", err)
