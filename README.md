@@ -24,6 +24,10 @@ the installer itself.
   a directory containing files that will be dropped in `/` at install-time
   (note: by default, file ownership is not preserved and `root:wheel`
   is used)
+- Optionally customize both the new installer and its kernel RAM disk
+  at build time. Two different executables can be specified as command
+  line arguments: one for the installer customization, and the other
+  for kernel RAM disk customization
 
 [autoinstall]: https://man.openbsd.org/autoinstall.8
 [install.site]: https://man.openbsd.org/install.site.5
